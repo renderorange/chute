@@ -57,11 +57,11 @@ func openSelectedBody(t *testing.T, m Model) Model {
 	return next.(Model)
 }
 
-func TestEnterLoadsBodyAndKeepsListFocus(t *testing.T) {
+func TestEnterLoadsBodyAndOpensReader(t *testing.T) {
 	m := openSelectedBody(t, loadedBody(t, sampleMessages(2), sampleBody()))
 
-	if m.focus != focusMessages {
-		t.Errorf("focus = %v, want messages so the list keeps navigating", m.focus)
+	if m.focus != focusReader {
+		t.Errorf("focus = %v, want reader after opening a message", m.focus)
 	}
 
 	key := bodyKey{account: "fastmail", folder: "INBOX", uid: m.messages[0].UID}
@@ -84,8 +84,8 @@ func TestCachedBodyIsNotFetchedTwice(t *testing.T) {
 	if cmd != nil {
 		t.Error("enter on a cached body returned a fetch command")
 	}
-	if got := next.(Model).focus; got != focusMessages {
-		t.Errorf("focus = %v, want messages", got)
+	if got := next.(Model).focus; got != focusReader {
+		t.Errorf("focus = %v, want reader", got)
 	}
 }
 
@@ -104,10 +104,8 @@ func TestReaderScrollsBody(t *testing.T) {
 	body := &mail.Body{Text: strings.Repeat("body line\n", 200)}
 	m := openSelectedBody(t, loadedBody(t, sampleMessages(1), body))
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = next.(Model)
 	if m.focus != focusReader {
-		t.Fatalf("focus = %v after tab, want reader", m.focus)
+		t.Fatalf("focus = %v, want reader", m.focus)
 	}
 
 	for i := 0; i < 5; i++ {
@@ -119,7 +117,7 @@ func TestReaderScrollsBody(t *testing.T) {
 	}
 
 	scrolled := m.readerScroll
-	next, _ = m.Update(keyMsg("k"))
+	next, _ := m.Update(keyMsg("k"))
 	m = next.(Model)
 	if m.readerScroll != scrolled-1 {
 		t.Errorf("scroll after k = %d, want %d", m.readerScroll, scrolled-1)
@@ -136,8 +134,10 @@ func TestMovingMessageCursorResetsReaderScroll(t *testing.T) {
 	body := &mail.Body{Text: strings.Repeat("body line\n", 200)}
 	m := openSelectedBody(t, loadedBody(t, sampleMessages(2), body))
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = next.(Model)
+	if m.focus != focusReader {
+		t.Fatalf("focus = %v, want reader", m.focus)
+	}
+
 	for i := 0; i < 5; i++ {
 		next, _ := m.Update(keyMsg("j"))
 		m = next.(Model)
@@ -147,11 +147,46 @@ func TestMovingMessageCursorResetsReaderScroll(t *testing.T) {
 	}
 
 	m.focus = focusMessages
-	next, _ = m.Update(keyMsg("j"))
+	next, _ := m.Update(keyMsg("j"))
 	m = next.(Model)
 
 	if m.readerScroll != 0 {
 		t.Errorf("readerScroll = %d after moving the message cursor, want 0", m.readerScroll)
+	}
+}
+
+func TestSinglePaneEnterAndEscNavigate(t *testing.T) {
+	m := loaded(t, 105, 59, []mail.Folder{{Name: "INBOX", Delimiter: '/'}}, nil)
+	m.loadMessages = fakeMessages(sampleMessages(1), nil)
+	m.loadBody = fakeBody(sampleBody(), nil)
+	m = openInbox(t, m)
+	m = openSelectedBody(t, m)
+
+	if m.focus != focusReader {
+		t.Fatalf("focus = %v, want reader", m.focus)
+	}
+	if title := firstContentLine(m.View()); !strings.Contains(title, "reader") {
+		t.Errorf("single-pane title = %q, want reader", title)
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+
+	if m.focus != focusMessages {
+		t.Errorf("focus after esc = %v, want messages", m.focus)
+	}
+	if title := firstContentLine(m.View()); !strings.Contains(title, "messages") {
+		t.Errorf("single-pane title after esc = %q, want messages", title)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+
+	if m.focus != focusFolders {
+		t.Errorf("focus after two escapes = %v, want folders", m.focus)
+	}
+	if title := firstContentLine(m.View()); !strings.Contains(title, "folders") {
+		t.Errorf("single-pane title after two escapes = %q, want folders", title)
 	}
 }
 

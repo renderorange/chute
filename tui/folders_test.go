@@ -200,7 +200,7 @@ func TestFolderLineTruncates(t *testing.T) {
 	}, nil)
 
 	line := m.folderLine(0, 20)
-	if !strings.Contains(line, "…") {
+	if !strings.Contains(line, "...") {
 		t.Errorf("folder line %q has no ellipsis", line)
 	}
 	if got := lipgloss.Width(line); got > 20 {

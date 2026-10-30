@@ -98,7 +98,7 @@ func (m Model) renderAttachmentModal(width, height int) string {
 		label = Truncate(label, max(10, width-14))
 
 		if i == m.attachCursor {
-			lines = append(lines, SelectedStyle.Render("▸ "+label))
+			lines = append(lines, SelectedStyle.Render("> "+label))
 		} else {
 			lines = append(lines, "  "+label)
 		}

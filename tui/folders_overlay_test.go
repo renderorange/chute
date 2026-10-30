@@ -9,7 +9,7 @@ import (
 )
 
 func TestFoldersOverlayOpensInTwoColumnMode(t *testing.T) {
-	m := loaded(t, 90, 30, sampleFolders(3), nil)
+	m := loaded(t, 110, 30, sampleFolders(3), nil)
 
 	next, _ := m.Update(keyMsg("\\"))
 	m = next.(Model)
@@ -26,7 +26,7 @@ func TestFoldersOverlayOpensInTwoColumnMode(t *testing.T) {
 }
 
 func TestFoldersOverlaySelectsFolder(t *testing.T) {
-	m := loaded(t, 90, 30, []mail.Folder{
+	m := loaded(t, 110, 30, []mail.Folder{
 		{Name: "INBOX", Delimiter: '/'},
 		{Name: "Work", Delimiter: '/'},
 	}, nil)
@@ -51,7 +51,7 @@ func TestFoldersOverlaySelectsFolder(t *testing.T) {
 }
 
 func TestFoldersOverlayClosesOnEscape(t *testing.T) {
-	m := loaded(t, 90, 30, sampleFolders(3), nil)
+	m := loaded(t, 110, 30, sampleFolders(3), nil)
 
 	next, _ := m.Update(keyMsg("\\"))
 	m = next.(Model)

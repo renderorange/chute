@@ -54,7 +54,7 @@ func TestThreeColumnThreshold(t *testing.T) {
 }
 
 func TestComputeLayoutTwoColumns(t *testing.T) {
-	for _, width := range []int{60, 80, 99, 119} {
+	for _, width := range []int{110, 115, 119} {
 		layout := ComputeLayout(width, 30)
 
 		if layout.Mode != ModeTwo {
@@ -66,9 +66,27 @@ func TestComputeLayoutTwoColumns(t *testing.T) {
 		if got, want := layout.Messages.Width+layout.Reader.Width, ContentWidth(width); got != want {
 			t.Errorf("width %d: columns sum to %d, want %d", width, got, want)
 		}
+		if layout.Messages.Width < MinMessagesWidth {
+			t.Errorf("width %d: messages width = %d, want at least %d", width, layout.Messages.Width, MinMessagesWidth)
+		}
 		if layout.Reader.Width < 1 {
 			t.Errorf("width %d: reader width = %d, want a positive width", width, layout.Reader.Width)
 		}
+	}
+}
+
+func TestSingleColumnThreshold(t *testing.T) {
+	if got := ComputeLayout(NarrowBreakpoint-1, 30).Mode; got != ModeSingle {
+		t.Errorf("mode at %d columns = %v, want ModeSingle", NarrowBreakpoint-1, got)
+	}
+	if got := ComputeLayout(NarrowBreakpoint, 30).Mode; got != ModeTwo {
+		t.Errorf("mode at %d columns = %v, want ModeTwo", NarrowBreakpoint, got)
+	}
+}
+
+func TestTabletWidthIsSinglePane(t *testing.T) {
+	if got := ComputeLayout(105, 59).Mode; got != ModeSingle {
+		t.Errorf("mode at the tablet width = %v, want ModeSingle", got)
 	}
 }
 

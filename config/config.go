@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -49,6 +50,10 @@ type Account struct {
 	// From is the address used in the From header, for accounts whose login
 	// differs from the address they send as.
 	From string `toml:"from"`
+
+	// StartFolder is opened automatically after the first folder load. Unset
+	// means the account's INBOX; an empty string disables the automatic open.
+	StartFolder *string `toml:"start_folder"`
 
 	IMAP IMAP `toml:"imap"`
 	SMTP SMTP `toml:"smtp"`
@@ -256,6 +261,15 @@ func (a *Account) Sender() string {
 	}
 
 	return a.IMAP.Username
+}
+
+// StartFolderName resolves start_folder: INBOX when unset, "" when disabled.
+func (a *Account) StartFolderName() string {
+	if a.StartFolder == nil {
+		return "INBOX"
+	}
+
+	return strings.TrimSpace(*a.StartFolder)
 }
 
 func boolPtr(v bool) *bool {

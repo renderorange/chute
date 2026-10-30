@@ -37,9 +37,10 @@ type Model struct {
 	width  int
 	height int
 
-	focus  panelFocus
-	state  connState
-	status string
+	focus   panelFocus
+	state   connState
+	status  string
+	started bool
 
 	folders      []mail.Folder
 	folderCursor int
@@ -179,6 +180,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.folderOverlayCursor = 0
 		m.clampFolderScroll()
 
+		if !m.started {
+			m.started = true
+			if folder, ok := m.startFolder(); ok {
+				for i := range m.folders {
+					if m.folders[i].Name == folder.Name {
+						m.folderCursor = i
+						break
+					}
+				}
+				return m.openSelectedFolder()
+			}
+			if name := m.cfg.Accounts[m.account].StartFolderName(); name != "" {
+				m.status = fmt.Sprintf("start folder %q not found", name)
+			}
+		}
+
 		return m, nil
 
 	case messagesMsg:
@@ -258,6 +275,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = m.nextFocus()
 
 	case "esc":
+		switch {
+		case m.focus == focusReader:
+			m.focus = focusMessages
+		case m.focus == focusMessages && ComputeLayout(m.width, m.height).Mode == ModeSingle:
+			m.focus = focusFolders
+		}
 		m.status = ""
 
 	case "a":
@@ -386,6 +409,8 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	}
 
 	key := bodyKey{account: m.accountName(), folder: m.openFolder, uid: msg.UID}
+	m.focus = focusReader
+
 	if _, cached := m.bodyFor(key); cached {
 		return m, nil
 	}
@@ -496,10 +521,10 @@ func (m Model) View() string {
 	}
 
 	footer := m.renderFooter()
-	spacer := Blank(1)
+	spacer := Blank(SpacerHeight)
 	status := m.renderStatusBar()
 
-	return AppStyle.Render(JoinVertical(panels, footer, spacer, status))
+	return AppStyle.Render(JoinVertical(panels, spacer, footer, spacer, status))
 }
 
 // renderPanels draws the visible panels for the current mode.
@@ -539,15 +564,13 @@ func (m Model) renderPanels(layout Layout) string {
 
 // renderFooter shows the keys that work right now.
 func (m Model) renderFooter() string {
-	hints := "q:quit  tab:panel  j/k:move  enter:open  s:attachments  r:reload"
+	hints := "q:quit  j/k:move  enter:open  esc:back  tab:panel  s:attach  r:reload  \\:folders"
 
 	switch {
 	case m.attachOpen:
 		hints = "j/k:choose  enter:save  esc:close"
 	case m.foldersOpen:
 		hints = "j/k:choose  enter:open  esc:close"
-	case ComputeLayout(m.width, m.height).Mode != ModeThree:
-		hints = "q:quit  tab:panel  j/k:move  enter:open  s:attachments  r:reload  \\:folders"
 	}
 
 	return MutedStyle.Render(Truncate(hints, ContentWidth(m.width)))
@@ -559,7 +582,7 @@ func (m Model) renderStatusBar() string {
 
 	switch m.state {
 	case stateConnecting:
-		parts = append(parts, "connecting…")
+		parts = append(parts, "connecting...")
 	case stateConnected:
 		parts = append(parts, countLabel(len(m.folders), "folder"))
 	case stateFailed:
@@ -577,7 +600,7 @@ func (m Model) renderStatusBar() string {
 		parts = append(parts, m.status)
 	}
 
-	line := Truncate(strings.Join(parts, " · "), ContentWidth(m.width))
+	line := Truncate(strings.Join(parts, " | "), ContentWidth(m.width))
 	if m.state == stateFailed {
 		return ErrorStyle.Render(line)
 	}

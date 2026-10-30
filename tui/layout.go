@@ -89,7 +89,7 @@ func ComputeLayout(width, height int) Layout {
 		}
 
 	case width >= NarrowBreakpoint:
-		messages := clamp(w/3, MinMessagesWidth, MaxMessagesWidth)
+		messages := clamp(w*45/100, MinMessagesWidth, MaxMessagesWidth)
 		if w-messages < MinReaderWidth {
 			messages = max(0, w-MinReaderWidth)
 		}

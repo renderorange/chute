@@ -51,7 +51,7 @@ func (m Model) readerLines(width int) []string {
 
 	key := m.selectedBodyKey()
 	if m.loadingBody == key {
-		return append(lines, Blank(1), MutedStyle.Render("loading the body…"))
+		return append(lines, Blank(1), MutedStyle.Render("loading the body..."))
 	}
 
 	body, ok := m.bodyFor(key)

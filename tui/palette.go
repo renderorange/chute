@@ -17,7 +17,8 @@ var (
 )
 
 // Chrome heights. The app frame adds one blank line above and below, three columns
-// left and right; the footer, spacer and status bar each take one line.
+// left and right; the footer and the status bar each take one line, each separated
+// from the panels and from each other by a blank spacer line.
 const (
 	AppPaddingVertical   = 2
 	AppPaddingHorizontal = 6
@@ -25,7 +26,8 @@ const (
 	FooterHeight    = 1
 	SpacerHeight    = 1
 	StatusBarHeight = 1
-	ChromeHeight    = FooterHeight + SpacerHeight + StatusBarHeight
+
+	ChromeHeight = (2 * SpacerHeight) + FooterHeight + StatusBarHeight
 )
 
 // Panel padding. Unlike imap-notes, vertical padding is applied once, in the
@@ -38,7 +40,7 @@ const (
 // Breakpoints, measured in terminal columns.
 const (
 	// NarrowBreakpoint is the width below which only one panel fits.
-	NarrowBreakpoint = 60
+	NarrowBreakpoint = 110
 
 	// ThreeColumnBreakpoint is the width needed for folders, messages and reader.
 	ThreeColumnBreakpoint = 120
@@ -48,9 +50,9 @@ const (
 const (
 	MinFoldersWidth  = 24
 	MaxFoldersWidth  = 28
-	MinMessagesWidth = 28
-	MaxMessagesWidth = 42
-	MinReaderWidth   = 30
+	MinMessagesWidth = 40
+	MaxMessagesWidth = 48
+	MinReaderWidth   = 36
 )
 
 var (

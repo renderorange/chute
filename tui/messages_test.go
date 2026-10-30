@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
@@ -226,5 +227,48 @@ func TestReloadClearsOpenFolder(t *testing.T) {
 	}
 	if len(got.messages) != 0 {
 		t.Errorf("messages = %d after reload, want 0", len(got.messages))
+	}
+}
+
+func TestMessageLineFitsWidth(t *testing.T) {
+	m := loaded(t, 140, 40, []mail.Folder{{Name: "INBOX", Delimiter: '/'}}, nil)
+	m.messages = []mail.Message{{
+		UID: 1,
+		Envelope: imap.Envelope{
+			Subject: "a very long subject that must be truncated before the date",
+			From:    []imap.Address{{Name: "日本語の送信者名前", Mailbox: "x", Host: "example.org"}},
+			Date:    time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC),
+		},
+	}}
+
+	for _, width := range []int{38, 44, 52, 97} {
+		line := m.messageLine(0, width)
+		if got := lipgloss.Width(line); got > width {
+			t.Errorf("messageLine(%d) width = %d, want at most %d", width, got, width)
+		}
+		if got := lipgloss.Height(line); got != 1 {
+			t.Errorf("messageLine(%d) height = %d, want 1", width, got)
+		}
+	}
+}
+
+func TestPadColumn(t *testing.T) {
+	tests := []struct {
+		name  string
+		in    string
+		width int
+	}{
+		{"ascii short", "abc", 8},
+		{"ascii long", "abcdef", 4},
+		{"wide runes", "日本語", 8},
+		{"wide runes truncated", "日本語", 4},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lipgloss.Width(padColumn(tc.in, tc.width)); got != tc.width {
+				t.Errorf("padColumn(%q, %d) width = %d, want %d", tc.in, tc.width, got, tc.width)
+			}
+		})
 	}
 }

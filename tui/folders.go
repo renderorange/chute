@@ -66,7 +66,7 @@ func (m Model) folderLines(rows, width int) []string {
 
 	switch m.state {
 	case stateConnecting:
-		return []string{MutedStyle.Render("connecting…")}
+		return []string{MutedStyle.Render("connecting...")}
 	case stateFailed:
 		if len(m.folders) == 0 {
 			return []string{MutedStyle.Render("no folders")}
@@ -103,7 +103,7 @@ func folderRow(folder mail.Folder, selected bool, width int) string {
 		return MutedStyle.Render("  " + label)
 	}
 	if selected {
-		return SelectedStyle.Render("▸ " + label)
+		return SelectedStyle.Render("> " + label)
 	}
 
 	return NormalStyle.Render("  " + label)
@@ -116,4 +116,31 @@ func (m Model) selectedFolder() (mail.Folder, bool) {
 	}
 
 	return m.folders[m.folderCursor], true
+}
+
+// startFolder resolves the account's start folder against the loaded list.
+func (m Model) startFolder() (mail.Folder, bool) {
+	if m.account < 0 || m.account >= len(m.cfg.Accounts) {
+		return mail.Folder{}, false
+	}
+
+	name := m.cfg.Accounts[m.account].StartFolderName()
+	if name == "" {
+		return mail.Folder{}, false
+	}
+
+	inbox := strings.EqualFold(name, "INBOX")
+	for _, folder := range m.folders {
+		if !folder.Selectable() {
+			continue
+		}
+		if inbox && folder.Role() == mail.RoleInbox {
+			return folder, true
+		}
+		if strings.EqualFold(folder.Name, name) {
+			return folder, true
+		}
+	}
+
+	return mail.Folder{}, false
 }
