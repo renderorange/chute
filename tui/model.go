@@ -2,9 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/renderorange/chute/config"
+	"github.com/renderorange/chute/mail"
 )
 
 type panelFocus int
@@ -13,6 +15,15 @@ const (
 	focusFolders panelFocus = iota
 	focusMessages
 	focusReader
+)
+
+// connState is the per-account connection status shown in the status bar.
+type connState int
+
+const (
+	stateConnecting connState = iota
+	stateConnected
+	stateFailed
 )
 
 // Model is the root bubbletea model.
@@ -25,45 +36,141 @@ type Model struct {
 	height int
 
 	focus  panelFocus
+	state  connState
 	status string
+
+	folders      []mail.Folder
+	folderCursor int
+	folderScroll int
+
+	loadFolders loadFoldersFunc
 }
 
 // New builds the root model for a loaded config.
 func New(cfg *config.Config, version string) Model {
-	return Model{
-		version: version,
-		cfg:     cfg,
+	m := Model{
+		version:     version,
+		cfg:         cfg,
+		state:       stateConnecting,
+		loadFolders: defaultLoadFolders,
+	}
+
+	for i := range cfg.Accounts {
+		if cfg.Accounts[i].Default {
+			m.account = i
+			break
+		}
+	}
+
+	return m
+}
+
+// Init starts the first folder load.
+func (m Model) Init() tea.Cmd {
+	return m.reloadCmd()
+}
+
+// reloadCmd loads folders for the active account in the background.
+func (m Model) reloadCmd() tea.Cmd {
+	if len(m.cfg.Accounts) == 0 {
+		return nil
+	}
+
+	acct := m.cfg.Accounts[m.account]
+	load := m.loadFolders
+	if load == nil {
+		load = defaultLoadFolders
+	}
+
+	return func() tea.Msg {
+		folders, err := load(acct)
+		return foldersMsg{account: acct.Name, folders: folders, err: err}
 	}
 }
 
-// Init satisfies tea.Model. No command runs until the IMAP client exists.
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
-// Update handles terminal events.
+// Update handles terminal events and loader results.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.clampFocus()
+		m.clampFolderScroll()
+
+		return m, nil
+
+	case foldersMsg:
+		if msg.account != m.accountName() {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.state = stateFailed
+			m.status = msg.err.Error()
+			m.folders = nil
+			m.folderCursor = 0
+			m.folderScroll = 0
+
+			return m, nil
+		}
+
+		m.state = stateConnected
+		m.status = ""
+		m.folders = msg.folders
+		m.folderCursor = 0
+		m.folderScroll = 0
+		m.clampFolderScroll()
 
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		case "tab":
-			m.focus = m.nextFocus()
-			return m, nil
-		case "a":
-			m.status = "account selector arrives in M6"
-			return m, nil
-		case "esc":
-			m.status = ""
-			return m, nil
+		return m.handleKey(msg)
+	}
+
+	return m, nil
+}
+
+// handleKey applies a single keypress.
+func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+
+	case "tab":
+		m.focus = m.nextFocus()
+
+	case "esc":
+		m.status = ""
+
+	case "a":
+		m.status = "account selector arrives in M6"
+
+	case "r":
+		m.state = stateConnecting
+		m.status = ""
+
+		return m, m.reloadCmd()
+
+	case "up", "k":
+		if m.focus == focusFolders {
+			m.moveFolderCursor(-1)
+		}
+
+	case "down", "j":
+		if m.focus == focusFolders {
+			m.moveFolderCursor(1)
+		}
+
+	case "home", "g":
+		if m.focus == focusFolders {
+			m.folderCursor = 0
+			m.clampFolderScroll()
+		}
+
+	case "end", "G":
+		if m.focus == focusFolders && len(m.folders) > 0 {
+			m.folderCursor = len(m.folders) - 1
+			m.clampFolderScroll()
 		}
 	}
 
@@ -129,10 +236,12 @@ func (m Model) View() string {
 
 // renderPanels draws the visible panels for the current mode.
 func (m Model) renderPanels(layout Layout) string {
+	folderBody := m.folderLines(layout.Folders.Height - 1)
+
 	switch layout.Mode {
 	case ModeThree:
 		return JoinHorizontal(
-			m.renderPanel("folders", layout.Folders, m.folderLines()),
+			m.renderPanel("folders", layout.Folders, folderBody),
 			m.renderPanel("messages", layout.Messages, m.messageLines()),
 			m.renderPanel("reader", layout.Reader, m.readerLines()),
 		)
@@ -144,7 +253,10 @@ func (m Model) renderPanels(layout Layout) string {
 		)
 	}
 
-	body := m.messageLines()
+	body := m.folderLines(layout.Reader.Height - 1)
+	if m.focus == focusMessages {
+		body = m.messageLines()
+	}
 	if m.focus == focusReader {
 		body = m.readerLines()
 	}
@@ -152,53 +264,75 @@ func (m Model) renderPanels(layout Layout) string {
 	return m.renderPanel("chute", layout.Reader, body)
 }
 
-func (m Model) folderLines() []string {
-	return []string{
-		MutedStyle.Render("no folders yet"),
-		MutedStyle.Render("IMAP connect lands in M1b"),
-	}
-}
-
 func (m Model) messageLines() []string {
+	if m.state == stateConnecting {
+		return []string{MutedStyle.Render("waiting for folders")}
+	}
+
 	return []string{
-		MutedStyle.Render(fmt.Sprintf("%d account(s) configured", len(m.cfg.Accounts))),
+		MutedStyle.Render(fmt.Sprintf("%d folder(s)", len(m.folders))),
 		MutedStyle.Render("message list lands in M2"),
 	}
 }
 
 func (m Model) readerLines() []string {
+	folder, ok := m.selectedFolder()
+	if !ok {
+		return []string{MutedStyle.Render("no folder selected")}
+	}
+
+	role := "folder"
+	if folder.Role() != mail.RoleNone {
+		role = string(folder.Role())
+	}
+
 	return []string{
-		NormalStyle.Render(m.version),
-		MutedStyle.Render("reader lands in M2"),
+		NormalStyle.Render(folder.Name),
+		MutedStyle.Render(role),
 	}
 }
 
 // renderFooter shows the keys that work right now.
 func (m Model) renderFooter() string {
-	hints := "q:quit  tab:next panel  a:accounts"
+	hints := "q:quit  tab:next panel  j/k:move  r:reload  a:accounts"
 
-	mode := ComputeLayout(m.width, m.height).Mode
-	if mode == ModeTwo {
-		hints = "q:quit  tab:next panel  a:accounts  \\:folders"
-	}
-	if mode == ModeSingle {
-		hints = "q:quit  tab:next panel  a:accounts"
+	if ComputeLayout(m.width, m.height).Mode == ModeTwo {
+		hints = "q:quit  tab:next panel  r:reload  a:accounts  \\:folders"
 	}
 
 	return MutedStyle.Render(Truncate(hints, ContentWidth(m.width)))
 }
 
-// renderStatusBar shows the active account and any transient status message.
+// renderStatusBar shows the account, connection state, folder count and messages.
 func (m Model) renderStatusBar() string {
-	name := ""
-	if m.account < len(m.cfg.Accounts) {
-		name = m.cfg.Accounts[m.account].Name
+	parts := []string{"[" + m.accountName() + "]"}
+
+	switch m.state {
+	case stateConnecting:
+		parts = append(parts, "connecting…")
+	case stateConnected:
+		parts = append(parts, fmt.Sprintf("%d folders", len(m.folders)))
+	case stateFailed:
+		parts = append(parts, "disconnected")
 	}
 
-	left := fmt.Sprintf("[%s] %s", name, m.status)
 	if m.status != "" {
-		return ErrorStyle.Render(Truncate(left, ContentWidth(m.width)))
+		parts = append(parts, m.status)
 	}
 
-	return MutedStyle.Render(Truncate(left, ContentWidth(m.width)))
+	line := Truncate(strings.Join(parts, " "), ContentWidth(m.width))
+	if m.state == stateFailed {
+		return ErrorStyle.Render(line)
+	}
+
+	return MutedStyle.Render(line)
+}
+
+// accountName is the active account's name, or an empty string.
+func (m Model) accountName() string {
+	if m.account < 0 || m.account >= len(m.cfg.Accounts) {
+		return ""
+	}
+
+	return m.cfg.Accounts[m.account].Name
 }
