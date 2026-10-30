@@ -35,6 +35,10 @@ type General struct {
 
 	// PollInterval is the seconds between incremental new-mail checks.
 	PollInterval int `toml:"poll_interval"`
+
+	// DownloadDir is where attachments are saved. A leading ~ is expanded; an
+	// empty value means ~/Downloads.
+	DownloadDir string `toml:"download_dir"`
 }
 
 // Account is one mail account.

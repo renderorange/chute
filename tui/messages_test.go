@@ -114,14 +114,14 @@ func TestReaderShowsSelectedMessage(t *testing.T) {
 	m := openInbox(t, withInbox(t, sampleMessages(2), nil))
 
 	// Cursor starts on the newest message.
-	if reader := strings.Join(m.readerLines(), "\n"); !strings.Contains(reader, "subject 02") {
+	if reader := strings.Join(m.readerLines(m.readerInnerWidth()), "\n"); !strings.Contains(reader, "subject 02") {
 		t.Errorf("reader missing the selected subject: %q", reader)
 	}
 
 	next, _ := m.Update(keyMsg("j"))
 	m = next.(Model)
 
-	if reader := strings.Join(m.readerLines(), "\n"); !strings.Contains(reader, "subject 01") {
+	if reader := strings.Join(m.readerLines(m.readerInnerWidth()), "\n"); !strings.Contains(reader, "subject 01") {
 		t.Errorf("reader did not follow the cursor to the older message: %q", reader)
 	}
 }

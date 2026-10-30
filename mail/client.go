@@ -1,4 +1,4 @@
-// Package mail talks to IMAP servers.
+// Package mail talks to IMAP servers and decodes message bodies.
 package mail
 
 import (

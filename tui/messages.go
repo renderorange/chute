@@ -51,6 +51,8 @@ func (m *Model) moveMessageCursor(delta int) {
 	if m.messageCursor >= m.messageScroll+rows {
 		m.messageScroll = m.messageCursor - rows + 1
 	}
+
+	m.readerScroll = 0
 }
 
 // clampMessageScroll keeps the stored offset valid after a reload or resize.
