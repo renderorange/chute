@@ -59,14 +59,14 @@ func (m *Model) clampFolderScroll() {
 }
 
 // folderLines renders the visible slice of the folder list.
-func (m Model) folderLines(rows int) []string {
+func (m Model) folderLines(rows, width int) []string {
 	if rows < 1 {
 		return nil
 	}
 
 	switch m.state {
 	case stateConnecting:
-		return []string{MutedStyle.Render("connecting…")}
+		return []string{MutedStyle.Render("connecting...")}
 	case stateFailed:
 		if len(m.folders) == 0 {
 			return []string{MutedStyle.Render("no folders")}
@@ -82,22 +82,28 @@ func (m Model) folderLines(rows int) []string {
 
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		lines = append(lines, m.folderLine(i))
+		lines = append(lines, m.folderLine(i, width))
 	}
 
 	return lines
 }
 
 // folderLine renders one folder, indented by depth and marked when selected.
-func (m Model) folderLine(index int) string {
-	folder := m.folders[index]
+func (m Model) folderLine(index, width int) string {
+	return folderRow(m.folders[index], index == m.folderCursor, width)
+}
+
+// folderRow renders one folder row: indent, leaf, marker and styling. The label
+// is truncated so a long name never wraps onto a second line.
+func folderRow(folder mail.Folder, selected bool, width int) string {
 	label := strings.Repeat("  ", folder.Depth()) + folder.Leaf()
+	label = Truncate(label, max(1, width-2))
 
 	if !folder.Selectable() {
-		return MutedStyle.Render(label)
+		return MutedStyle.Render("  " + label)
 	}
-	if index == m.folderCursor {
-		return SelectedStyle.Render("▸ " + label)
+	if selected {
+		return SelectedStyle.Render("> " + label)
 	}
 
 	return NormalStyle.Render("  " + label)
@@ -110,4 +116,31 @@ func (m Model) selectedFolder() (mail.Folder, bool) {
 	}
 
 	return m.folders[m.folderCursor], true
+}
+
+// startFolder resolves the account's start folder against the loaded list.
+func (m Model) startFolder() (mail.Folder, bool) {
+	if m.account < 0 || m.account >= len(m.cfg.Accounts) {
+		return mail.Folder{}, false
+	}
+
+	name := m.cfg.Accounts[m.account].StartFolderName()
+	if name == "" {
+		return mail.Folder{}, false
+	}
+
+	inbox := strings.EqualFold(name, "INBOX")
+	for _, folder := range m.folders {
+		if !folder.Selectable() {
+			continue
+		}
+		if inbox && folder.Role() == mail.RoleInbox {
+			return folder, true
+		}
+		if strings.EqualFold(folder.Name, name) {
+			return folder, true
+		}
+	}
+
+	return mail.Folder{}, false
 }

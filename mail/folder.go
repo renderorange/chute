@@ -100,3 +100,43 @@ func (f Folder) Leaf() string {
 
 	return f.Name[idx+1:]
 }
+
+// FilterFolders removes configured mailbox names and their subfolders.
+// Matching is case-insensitive.
+func FilterFolders(folders []Folder, hide []string) []Folder {
+	if len(hide) == 0 {
+		return folders
+	}
+
+	filtered := make([]Folder, 0, len(folders))
+	for _, folder := range folders {
+		if hiddenFolder(folder, hide) {
+			continue
+		}
+		filtered = append(filtered, folder)
+	}
+
+	return filtered
+}
+
+// hiddenFolder reports whether a folder is the named mailbox or sits below it.
+func hiddenFolder(folder Folder, hide []string) bool {
+	name := strings.ToLower(folder.Name)
+
+	for _, hidden := range hide {
+		hidden = strings.TrimSpace(hidden)
+		if hidden == "" {
+			continue
+		}
+		hidden = strings.ToLower(hidden)
+
+		if name == hidden {
+			return true
+		}
+		if folder.Delimiter != 0 && strings.HasPrefix(name, hidden+string(folder.Delimiter)) {
+			return true
+		}
+	}
+
+	return false
+}

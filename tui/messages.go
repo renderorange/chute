@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/renderorange/chute/mail"
 )
@@ -51,6 +52,8 @@ func (m *Model) moveMessageCursor(delta int) {
 	if m.messageCursor >= m.messageScroll+rows {
 		m.messageScroll = m.messageCursor - rows + 1
 	}
+
+	m.readerScroll = 0
 }
 
 // clampMessageScroll keeps the stored offset valid after a reload or resize.
@@ -77,7 +80,7 @@ func (m Model) messageLines(rows, width int) []string {
 
 	switch {
 	case m.msgLoading:
-		return []string{MutedStyle.Render("loading…")}
+		return []string{MutedStyle.Render("loading...")}
 	case m.openFolder == "":
 		return []string{MutedStyle.Render("open a folder with enter")}
 	case len(m.messages) == 0:
@@ -95,31 +98,38 @@ func (m Model) messageLines(rows, width int) []string {
 	return lines
 }
 
-// messageLine renders one message row: markers, sender, subject, date.
+// messageGap is the spaces between the subject field and the date.
+const messageGap = 3
+
+// messageLine renders one message row: markers, sender, subject, gap, date.
 func (m Model) messageLine(index, width int) string {
 	msg := m.messages[index]
 
-	// Two marker columns: unread dot, then flag.
+	// ASCII markers keep every row one cell wide, so the date never wraps.
 	unread := " "
 	if !msg.Seen() {
-		unread = "●"
+		unread = "*"
 	}
 	flagged := " "
 	if msg.Flagged() {
 		flagged = "!"
 	}
 	if index == m.messageCursor {
-		unread = "▸"
+		unread = ">"
 	}
 
 	date := msg.Date().Local().Format("Jan 02")
 	fromWidth := clamp(width/4, 10, 20)
-	subjectWidth := max(4, width-fromWidth-len(date)-5)
+	subjectWidth := width - fromWidth - len(date) - messageGap - 4
+	if subjectWidth < 4 {
+		subjectWidth = 4
+	}
 
-	line := fmt.Sprintf("%s%s %-*s %-*s %s",
+	line := fmt.Sprintf("%s%s %s %s%s%s",
 		unread, flagged,
-		fromWidth, Truncate(msg.From(), fromWidth),
-		subjectWidth, Truncate(msg.Subject(), subjectWidth),
+		padColumn(singleLine(msg.From()), fromWidth),
+		padColumn(singleLine(msg.Subject()), subjectWidth),
+		strings.Repeat(" ", messageGap),
 		date,
 	)
 

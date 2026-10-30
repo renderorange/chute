@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -35,6 +36,10 @@ type General struct {
 
 	// PollInterval is the seconds between incremental new-mail checks.
 	PollInterval int `toml:"poll_interval"`
+
+	// DownloadDir is where attachments are saved. A leading ~ is expanded; an
+	// empty value means ~/Downloads.
+	DownloadDir string `toml:"download_dir"`
 }
 
 // Account is one mail account.
@@ -45,6 +50,10 @@ type Account struct {
 	// From is the address used in the From header, for accounts whose login
 	// differs from the address they send as.
 	From string `toml:"from"`
+
+	// StartFolder is opened automatically after the first folder load. Unset
+	// means the account's INBOX; an empty string disables the automatic open.
+	StartFolder *string `toml:"start_folder"`
 
 	IMAP IMAP `toml:"imap"`
 	SMTP SMTP `toml:"smtp"`
@@ -65,6 +74,10 @@ type IMAP struct {
 	Trash   string `toml:"trash"`
 	Archive string `toml:"archive"`
 	Junk    string `toml:"junk"`
+
+	// HideFolders lists mailbox names to leave out of the folder list. Their
+	// subfolders are hidden too; matching is case-insensitive.
+	HideFolders []string `toml:"hide_folders"`
 }
 
 // SMTP is the outgoing server for an account.
@@ -248,6 +261,15 @@ func (a *Account) Sender() string {
 	}
 
 	return a.IMAP.Username
+}
+
+// StartFolderName resolves start_folder: INBOX when unset, "" when disabled.
+func (a *Account) StartFolderName() string {
+	if a.StartFolder == nil {
+		return "INBOX"
+	}
+
+	return strings.TrimSpace(*a.StartFolder)
 }
 
 func boolPtr(v bool) *bool {

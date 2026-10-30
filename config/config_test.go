@@ -301,3 +301,63 @@ func TestSender(t *testing.T) {
 		t.Errorf("sender = %q, want login name %q", got, want)
 	}
 }
+
+func TestLoadHideFolders(t *testing.T) {
+	body := strings.Replace(validConfig,
+		`password_command = "pass show mail/fastmail"`,
+		`password_command = "pass show mail/fastmail"
+hide_folders = ["Notes", "Receipts"]`, 1)
+
+	cfg, err := Load(writeConfig(t, body, 0o600))
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	got := cfg.Accounts[0].IMAP.HideFolders
+	if len(got) != 2 || got[0] != "Notes" || got[1] != "Receipts" {
+		t.Errorf("hide_folders = %v, want [Notes Receipts]", got)
+	}
+}
+
+func TestLoadStartFolder(t *testing.T) {
+	body := strings.Replace(validConfig, `[[accounts]]
+name = "fastmail"`, `[[accounts]]
+name = "fastmail"
+start_folder = "Work"`, 1)
+
+	cfg, err := Load(writeConfig(t, body, 0o600))
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	got := cfg.Accounts[0].StartFolder
+	if got == nil || *got != "Work" {
+		t.Errorf("start_folder = %v, want Work", got)
+	}
+	if cfg.Accounts[1].StartFolder != nil {
+		t.Error("unset start_folder should stay nil")
+	}
+}
+
+func TestStartFolderName(t *testing.T) {
+	work := "Work"
+	disabled := ""
+
+	tests := []struct {
+		name string
+		acct Account
+		want string
+	}{
+		{"default", Account{}, "INBOX"},
+		{"configured", Account{StartFolder: &work}, "Work"},
+		{"disabled", Account{StartFolder: &disabled}, ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.acct.StartFolderName(); got != tc.want {
+				t.Errorf("StartFolderName() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
