@@ -41,10 +41,18 @@ func main() {
 		return
 	}
 
-	program := tea.NewProgram(tui.New(cfg, version), tea.WithAltScreen())
-	if _, err := program.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	model := tui.New(cfg, version)
+	program := tea.NewProgram(model, tea.WithAltScreen())
+
+	_, runErr := program.Run()
+	closeErr := model.Close()
+
+	if runErr != nil {
+		fmt.Fprintln(os.Stderr, runErr)
 		os.Exit(1)
+	}
+	if closeErr != nil {
+		fmt.Fprintln(os.Stderr, closeErr)
 	}
 }
 

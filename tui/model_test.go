@@ -194,3 +194,20 @@ func TestTruncate(t *testing.T) {
 		}
 	}
 }
+
+func TestNewWiresPersistentLoaders(t *testing.T) {
+	m := New(testConfig(), "test")
+
+	if m.sessions == nil {
+		t.Error("session manager is nil")
+	}
+	if m.loadFolders == nil || m.loadMessages == nil || m.loadBody == nil {
+		t.Error("loaders are not wired")
+	}
+}
+
+func TestCloseWithoutConnections(t *testing.T) {
+	if err := New(testConfig(), "test").Close(); err != nil {
+		t.Errorf("Close on a fresh model = %v, want nil", err)
+	}
+}

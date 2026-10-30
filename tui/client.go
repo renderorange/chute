@@ -16,6 +16,29 @@ type loadMessagesFunc func(acct config.Account, folder string) ([]mail.Message, 
 // loadBodyFunc downloads one message body and its attachments.
 type loadBodyFunc func(acct config.Account, folder string, uid imap.UID) (*mail.Body, error)
 
+// loaders groups the three background loaders the model calls.
+type loaders struct {
+	folders  loadFoldersFunc
+	messages loadMessagesFunc
+	body     loadBodyFunc
+}
+
+// sessionLoaders binds every loader to one persistent session per account, so
+// opening a folder, listing envelopes and reading a body reuse one connection.
+func sessionLoaders(manager *mail.Manager) loaders {
+	return loaders{
+		folders: func(acct config.Account) ([]mail.Folder, error) {
+			return manager.For(acct).Folders()
+		},
+		messages: func(acct config.Account, folder string) ([]mail.Message, error) {
+			return manager.For(acct).FetchEnvelopes(folder)
+		},
+		body: func(acct config.Account, folder string, uid imap.UID) (*mail.Body, error) {
+			return manager.For(acct).FetchBody(folder, uid)
+		},
+	}
+}
+
 // foldersMsg carries the result of loading folders for one account.
 type foldersMsg struct {
 	account string
@@ -45,51 +68,4 @@ type bodyMsg struct {
 	uid     imap.UID
 	body    *mail.Body
 	err     error
-}
-
-// defaultLoadFolders resolves the password, connects, lists folders, and disconnects.
-func defaultLoadFolders(acct config.Account) ([]mail.Folder, error) {
-	client, err := connect(acct)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	return client.Folders()
-}
-
-// defaultLoadMessages resolves the password, connects, fetches envelopes, and
-// disconnects. M2a reconnects per folder; a persistent client arrives with the
-// per-account goroutine.
-func defaultLoadMessages(acct config.Account, folder string) ([]mail.Message, error) {
-	client, err := connect(acct)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	return client.FetchEnvelopes(folder)
-}
-
-// defaultLoadBody resolves the password, connects, fetches one body, and
-// disconnects. M2b reconnects per opened message; the persistent client arrives
-// with the per-account goroutine.
-func defaultLoadBody(acct config.Account, folder string, uid imap.UID) (*mail.Body, error) {
-	client, err := connect(acct)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	return client.FetchBody(folder, uid)
-}
-
-// connect resolves the account password and opens an IMAP connection.
-func connect(acct config.Account) (*mail.Client, error) {
-	password, err := acct.IMAPPassword()
-	if err != nil {
-		return nil, err
-	}
-
-	return mail.Connect(acct, password)
 }

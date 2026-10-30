@@ -32,6 +32,8 @@ type Model struct {
 	cfg     *config.Config
 	account int
 
+	sessions *mail.Manager
+
 	width  int
 	height int
 
@@ -63,13 +65,17 @@ type Model struct {
 
 // New builds the root model for a loaded config.
 func New(cfg *config.Config, version string) Model {
+	sessions := mail.NewManager()
+	load := sessionLoaders(sessions)
+
 	m := Model{
 		version:      version,
 		cfg:          cfg,
 		state:        stateConnecting,
-		loadFolders:  defaultLoadFolders,
-		loadMessages: defaultLoadMessages,
-		loadBody:     defaultLoadBody,
+		sessions:     sessions,
+		loadFolders:  load.folders,
+		loadMessages: load.messages,
+		loadBody:     load.body,
 		bodies:       make(map[bodyKey]*mail.Body),
 	}
 
@@ -81,6 +87,15 @@ func New(cfg *config.Config, version string) Model {
 	}
 
 	return m
+}
+
+// Close logs out every persistent account connection.
+func (m Model) Close() error {
+	if m.sessions == nil {
+		return nil
+	}
+
+	return m.sessions.Close()
 }
 
 // Init starts the first folder load.
@@ -97,7 +112,7 @@ func (m Model) reloadCmd() tea.Cmd {
 	acct := m.cfg.Accounts[m.account]
 	load := m.loadFolders
 	if load == nil {
-		load = defaultLoadFolders
+		return nil
 	}
 
 	return func() tea.Msg {
@@ -115,7 +130,7 @@ func (m Model) loadMessagesCmd(folder string) tea.Cmd {
 	acct := m.cfg.Accounts[m.account]
 	load := m.loadMessages
 	if load == nil {
-		load = defaultLoadMessages
+		return nil
 	}
 
 	return func() tea.Msg {
@@ -379,7 +394,7 @@ func (m Model) loadBodyCmd(key bodyKey) tea.Cmd {
 	acct := m.cfg.Accounts[m.account]
 	load := m.loadBody
 	if load == nil {
-		load = defaultLoadBody
+		return nil
 	}
 
 	return func() tea.Msg {
