@@ -90,6 +90,7 @@ func runCheck(cfg *config.Config) bool {
 			ok = false
 			continue
 		}
+		folders = mail.FilterFolders(folders, acct.IMAP.HideFolders)
 		if closeErr != nil {
 			fmt.Fprintf(os.Stderr, "%s: logout: %v\n", acct.Name, closeErr)
 			ok = false

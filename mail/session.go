@@ -56,7 +56,7 @@ func (s *Session) Folders() ([]Folder, error) {
 		return nil, err
 	}
 
-	return folders, nil
+	return FilterFolders(folders, s.acct.IMAP.HideFolders), nil
 }
 
 // FetchEnvelopes loads one folder's message envelopes over the persistent

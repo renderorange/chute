@@ -97,3 +97,24 @@ func TestFolderPathHelpers(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterFolders(t *testing.T) {
+	folders := []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Notes", Delimiter: '/'},
+		{Name: "Notes/Archive", Delimiter: '/'},
+		{Name: "Work", Delimiter: '/'},
+	}
+
+	got := FilterFolders(folders, []string{"notes"})
+	if len(got) != 2 {
+		t.Fatalf("folders = %d, want 2", len(got))
+	}
+	if got[0].Name != "INBOX" || got[1].Name != "Work" {
+		t.Errorf("folders = %v, want INBOX and Work", got)
+	}
+
+	if same := FilterFolders(folders, nil); len(same) != len(folders) {
+		t.Errorf("empty hide list removed folders: %v", same)
+	}
+}

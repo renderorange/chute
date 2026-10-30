@@ -59,7 +59,7 @@ func (m *Model) clampFolderScroll() {
 }
 
 // folderLines renders the visible slice of the folder list.
-func (m Model) folderLines(rows int) []string {
+func (m Model) folderLines(rows, width int) []string {
 	if rows < 1 {
 		return nil
 	}
@@ -82,21 +82,27 @@ func (m Model) folderLines(rows int) []string {
 
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		lines = append(lines, m.folderLine(i))
+		lines = append(lines, m.folderLine(i, width))
 	}
 
 	return lines
 }
 
 // folderLine renders one folder, indented by depth and marked when selected.
-func (m Model) folderLine(index int) string {
-	folder := m.folders[index]
+func (m Model) folderLine(index, width int) string {
+	return folderRow(m.folders[index], index == m.folderCursor, width)
+}
+
+// folderRow renders one folder row: indent, leaf, marker and styling. The label
+// is truncated so a long name never wraps onto a second line.
+func folderRow(folder mail.Folder, selected bool, width int) string {
 	label := strings.Repeat("  ", folder.Depth()) + folder.Leaf()
+	label = Truncate(label, max(1, width-2))
 
 	if !folder.Selectable() {
-		return MutedStyle.Render(label)
+		return MutedStyle.Render("  " + label)
 	}
-	if index == m.folderCursor {
+	if selected {
 		return SelectedStyle.Render("▸ " + label)
 	}
 

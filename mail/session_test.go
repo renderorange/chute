@@ -199,3 +199,24 @@ func TestManagerCloseClosesSessions(t *testing.T) {
 		t.Error("Manager.Close did not close the account connection")
 	}
 }
+
+func TestSessionHidesFolders(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Notes", Delimiter: '/'},
+		{Name: "Notes/Archive", Delimiter: '/'},
+	}}
+	acct := config.Account{Name: "fastmail", IMAP: config.IMAP{HideFolders: []string{"Notes"}}}
+	session := newSession(acct, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	folders, err := session.Folders()
+	if err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+	if len(folders) != 1 || folders[0].Name != "INBOX" {
+		t.Errorf("folders = %v, want only INBOX", folders)
+	}
+}

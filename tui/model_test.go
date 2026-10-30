@@ -152,14 +152,42 @@ func TestFocusClampsWhenNarrowing(t *testing.T) {
 func TestTabCyclesInSingleMode(t *testing.T) {
 	m := sized(50, 20)
 
+	if m.focus != focusFolders {
+		t.Fatalf("initial focus = %v, want folders", m.focus)
+	}
+
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if got := next.(Model).focus; got != focusReader {
-		t.Errorf("focus after one tab = %v, want reader", got)
+	if got := next.(Model).focus; got != focusMessages {
+		t.Errorf("focus after one tab = %v, want messages", got)
 	}
 
 	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyTab})
-	if got := next.(Model).focus; got != focusMessages {
-		t.Errorf("focus after two tabs = %v, want messages", got)
+	if got := next.(Model).focus; got != focusReader {
+		t.Errorf("focus after two tabs = %v, want reader", got)
+	}
+
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyTab})
+	if got := next.(Model).focus; got != focusFolders {
+		t.Errorf("focus after three tabs = %v, want folders", got)
+	}
+}
+
+func TestSingleModeShowsFocusedPanel(t *testing.T) {
+	m := loaded(t, 50, 20, sampleFolders(3), nil)
+
+	if m.focus != focusFolders {
+		t.Fatalf("focus = %v, want folders", m.focus)
+	}
+	if title := firstContentLine(m.View()); !strings.Contains(title, "folders") {
+		t.Errorf("single-mode title = %q, want folders", title)
+	}
+	if view := m.View(); !strings.Contains(view, "INBOX") {
+		t.Error("single-mode view missing INBOX")
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if title := firstContentLine(next.(Model).View()); !strings.Contains(title, "messages") {
+		t.Errorf("title after tab = %q, want messages", title)
 	}
 }
 

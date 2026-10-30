@@ -69,6 +69,10 @@ type IMAP struct {
 	Trash   string `toml:"trash"`
 	Archive string `toml:"archive"`
 	Junk    string `toml:"junk"`
+
+	// HideFolders lists mailbox names to leave out of the folder list. Their
+	// subfolders are hidden too; matching is case-insensitive.
+	HideFolders []string `toml:"hide_folders"`
 }
 
 // SMTP is the outgoing server for an account.

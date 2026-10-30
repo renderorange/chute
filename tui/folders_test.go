@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
@@ -184,12 +185,26 @@ func TestFolderLineIndentation(t *testing.T) {
 		{Name: "Work/Projects", Delimiter: '/'},
 	}, nil)
 
-	nested := m.folderLine(1)
+	nested := m.folderLine(1, 40)
 	if !strings.Contains(nested, "  Projects") {
 		t.Errorf("nested line = %q, want two spaces before the leaf", nested)
 	}
 	if strings.Contains(nested, "Work/") {
 		t.Errorf("nested line = %q, want the leaf only", nested)
+	}
+}
+
+func TestFolderLineTruncates(t *testing.T) {
+	m := loaded(t, 140, 40, []mail.Folder{
+		{Name: "a folder name long enough to need truncation", Delimiter: '/'},
+	}, nil)
+
+	line := m.folderLine(0, 20)
+	if !strings.Contains(line, "…") {
+		t.Errorf("folder line %q has no ellipsis", line)
+	}
+	if got := lipgloss.Width(line); got > 20 {
+		t.Errorf("folder line width = %d, want at most 20", got)
 	}
 }
 

@@ -41,7 +41,7 @@ const (
 	NarrowBreakpoint = 60
 
 	// ThreeColumnBreakpoint is the width needed for folders, messages and reader.
-	ThreeColumnBreakpoint = 100
+	ThreeColumnBreakpoint = 120
 )
 
 // Column clamps.

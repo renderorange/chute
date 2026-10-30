@@ -301,3 +301,20 @@ func TestSender(t *testing.T) {
 		t.Errorf("sender = %q, want login name %q", got, want)
 	}
 }
+
+func TestLoadHideFolders(t *testing.T) {
+	body := strings.Replace(validConfig,
+		`password_command = "pass show mail/fastmail"`,
+		`password_command = "pass show mail/fastmail"
+hide_folders = ["Notes", "Receipts"]`, 1)
+
+	cfg, err := Load(writeConfig(t, body, 0o600))
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	got := cfg.Accounts[0].IMAP.HideFolders
+	if len(got) != 2 || got[0] != "Notes" || got[1] != "Receipts" {
+		t.Errorf("hide_folders = %v, want [Notes Receipts]", got)
+	}
+}

@@ -58,6 +58,9 @@ type Model struct {
 	attachOpen   bool
 	attachCursor int
 
+	foldersOpen         bool
+	folderOverlayCursor int
+
 	loadFolders  loadFoldersFunc
 	loadMessages loadMessagesFunc
 	loadBody     loadBodyFunc
@@ -172,6 +175,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.folders = msg.folders
 		m.folderCursor = 0
 		m.folderScroll = 0
+		m.foldersOpen = false
+		m.folderOverlayCursor = 0
 		m.clampFolderScroll()
 
 		return m, nil
@@ -241,6 +246,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.attachOpen {
 		return m.handleAttachKey(msg)
 	}
+	if m.foldersOpen {
+		return m.handleFoldersKey(msg)
+	}
 
 	switch msg.String() {
 	case "q", "ctrl+c":
@@ -266,6 +274,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.readerScroll = 0
 		m.attachOpen = false
 		m.attachCursor = 0
+		m.foldersOpen = false
+		m.folderOverlayCursor = 0
 
 		return m, m.reloadCmd()
 
@@ -279,6 +289,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "s":
 		return m.openAttachments()
+
+	case "\\":
+		return m.openFolders()
 
 	case "up", "k":
 		switch m.focus {
@@ -357,6 +370,8 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 	m.readerScroll = 0
 	m.attachOpen = false
 	m.attachCursor = 0
+	m.foldersOpen = false
+	m.folderOverlayCursor = 0
 
 	return m, m.loadMessagesCmd(folder.Name)
 }
@@ -407,10 +422,11 @@ func (m Model) loadBodyCmd(key bodyKey) tea.Cmd {
 // clampFocus moves focus off a panel the current mode does not draw.
 func (m *Model) clampFocus() {
 	switch ComputeLayout(m.width, m.height).Mode {
-	case ModeThree:
+	case ModeThree, ModeSingle:
 		return
 	}
 
+	// ModeTwo shows folders in an overlay, never as a focused panel.
 	if m.focus == focusFolders {
 		m.focus = focusMessages
 	}
@@ -437,12 +453,27 @@ func (m Model) nextFocus() panelFocus {
 		return focusReader
 	}
 
-	// ModeSingle: messages and reader share the single panel.
-	if m.focus == focusReader {
+	// ModeSingle: folders, messages and reader share the single panel.
+	switch m.focus {
+	case focusFolders:
 		return focusMessages
+	case focusMessages:
+		return focusReader
+	default:
+		return focusFolders
 	}
+}
 
-	return focusReader
+// panelTitle names the pane shown in single-column mode.
+func panelTitle(focus panelFocus) string {
+	switch focus {
+	case focusFolders:
+		return "folders"
+	case focusMessages:
+		return "messages"
+	default:
+		return "reader"
+	}
 }
 
 // View renders the whole interface.
@@ -453,9 +484,14 @@ func (m Model) View() string {
 
 	layout := ComputeLayout(m.width, m.height)
 	panels := m.renderPanels(layout)
-	if m.attachOpen {
+	switch {
+	case m.attachOpen:
 		if modal := m.renderAttachmentModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal
+		}
+	case m.foldersOpen:
+		if overlay := m.renderFoldersOverlay(ContentWidth(m.width), ContentHeight(m.height)); overlay != "" {
+			panels = overlay
 		}
 	}
 
@@ -468,10 +504,11 @@ func (m Model) View() string {
 
 // renderPanels draws the visible panels for the current mode.
 func (m Model) renderPanels(layout Layout) string {
-	folderBody := m.folderLines(layout.Folders.Height - 1)
-	messageBody := m.messageLines(layout.Messages.Height-1, layout.Messages.Width-(2*PanelPaddingHorizontal))
-
 	readerWidth := max(1, layout.Reader.Width-(2*PanelPaddingHorizontal))
+	folderWidth := max(1, layout.Folders.Width-(2*PanelPaddingHorizontal))
+
+	folderBody := m.folderLines(layout.Folders.Height-1, folderWidth)
+	messageBody := m.messageLines(layout.Messages.Height-1, layout.Messages.Width-(2*PanelPaddingHorizontal))
 	readerBody := m.readerWindow(layout.Reader, m.readerLines(readerWidth))
 
 	switch layout.Mode {
@@ -489,15 +526,15 @@ func (m Model) renderPanels(layout Layout) string {
 		)
 	}
 
-	body := m.folderLines(layout.Reader.Height - 1)
+	body := m.folderLines(layout.Reader.Height-1, readerWidth)
 	if m.focus == focusMessages {
-		body = m.messageLines(layout.Reader.Height-1, layout.Reader.Width-(2*PanelPaddingHorizontal))
+		body = m.messageLines(layout.Reader.Height-1, readerWidth)
 	}
 	if m.focus == focusReader {
 		body = readerBody
 	}
 
-	return m.renderPanel("chute", layout.Reader, body)
+	return m.renderPanel(panelTitle(m.focus), layout.Reader, body)
 }
 
 // renderFooter shows the keys that work right now.
@@ -507,7 +544,9 @@ func (m Model) renderFooter() string {
 	switch {
 	case m.attachOpen:
 		hints = "j/k:choose  enter:save  esc:close"
-	case ComputeLayout(m.width, m.height).Mode == ModeTwo:
+	case m.foldersOpen:
+		hints = "j/k:choose  enter:open  esc:close"
+	case ComputeLayout(m.width, m.height).Mode != ModeThree:
 		hints = "q:quit  tab:panel  j/k:move  enter:open  s:attachments  r:reload  \\:folders"
 	}
 

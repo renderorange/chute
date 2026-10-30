@@ -44,8 +44,17 @@ func TestComputeLayoutThreeColumnsAtBreakpoint(t *testing.T) {
 	}
 }
 
+func TestThreeColumnThreshold(t *testing.T) {
+	if got := ComputeLayout(ThreeColumnBreakpoint-1, 40).Mode; got != ModeTwo {
+		t.Errorf("mode at %d columns = %v, want ModeTwo", ThreeColumnBreakpoint-1, got)
+	}
+	if got := ComputeLayout(ThreeColumnBreakpoint, 40).Mode; got != ModeThree {
+		t.Errorf("mode at %d columns = %v, want ModeThree", ThreeColumnBreakpoint, got)
+	}
+}
+
 func TestComputeLayoutTwoColumns(t *testing.T) {
-	for _, width := range []int{60, 80, 99} {
+	for _, width := range []int{60, 80, 99, 119} {
 		layout := ComputeLayout(width, 30)
 
 		if layout.Mode != ModeTwo {
