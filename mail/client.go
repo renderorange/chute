@@ -61,6 +61,55 @@ func (c *Client) Folders() ([]Folder, error) {
 	return foldersFromList(data), nil
 }
 
+// FetchEnvelopes opens a folder and returns every message's envelope, flags and
+// size. No message body is fetched.
+func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
+	if _, err := c.conn.Select(folder, nil).Wait(); err != nil {
+		return nil, fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
+	}
+
+	seqset := new(imap.SeqSet)
+	seqset.AddRange(1, 0)
+
+	cmd := c.conn.Fetch(seqset, &imap.FetchOptions{
+		Envelope:     true,
+		Flags:        true,
+		InternalDate: true,
+		RFC822Size:   true,
+		UID:          true,
+	})
+	defer cmd.Close()
+
+	buffers, err := cmd.Collect()
+	if err != nil {
+		return nil, fmt.Errorf("mail: account %q: fetching envelopes from %q: %w", c.account, folder, err)
+	}
+
+	return messagesFromBuffers(buffers), nil
+}
+
+// messagesFromBuffers converts protocol data into messages, in server order.
+func messagesFromBuffers(buffers []*imapclient.FetchMessageBuffer) []Message {
+	messages := make([]Message, 0, len(buffers))
+
+	for _, buf := range buffers {
+		msg := Message{
+			UID:          buf.UID,
+			SeqNum:       buf.SeqNum,
+			Flags:        buf.Flags,
+			Size:         buf.RFC822Size,
+			InternalDate: buf.InternalDate,
+		}
+		if buf.Envelope != nil {
+			msg.Envelope = *buf.Envelope
+		}
+
+		messages = append(messages, msg)
+	}
+
+	return messages
+}
+
 // foldersFromList converts protocol data into sorted folders.
 func foldersFromList(data []*imap.ListData) []Folder {
 	folders := make([]Folder, 0, len(data))

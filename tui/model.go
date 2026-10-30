@@ -43,16 +43,24 @@ type Model struct {
 	folderCursor int
 	folderScroll int
 
-	loadFolders loadFoldersFunc
+	openFolder    string
+	messages      []mail.Message
+	messageCursor int
+	messageScroll int
+	msgLoading    bool
+
+	loadFolders  loadFoldersFunc
+	loadMessages loadMessagesFunc
 }
 
 // New builds the root model for a loaded config.
 func New(cfg *config.Config, version string) Model {
 	m := Model{
-		version:     version,
-		cfg:         cfg,
-		state:       stateConnecting,
-		loadFolders: defaultLoadFolders,
+		version:      version,
+		cfg:          cfg,
+		state:        stateConnecting,
+		loadFolders:  defaultLoadFolders,
+		loadMessages: defaultLoadMessages,
 	}
 
 	for i := range cfg.Accounts {
@@ -88,6 +96,24 @@ func (m Model) reloadCmd() tea.Cmd {
 	}
 }
 
+// loadMessagesCmd loads one folder's envelopes in the background.
+func (m Model) loadMessagesCmd(folder string) tea.Cmd {
+	if len(m.cfg.Accounts) == 0 {
+		return nil
+	}
+
+	acct := m.cfg.Accounts[m.account]
+	load := m.loadMessages
+	if load == nil {
+		load = defaultLoadMessages
+	}
+
+	return func() tea.Msg {
+		messages, err := load(acct, folder)
+		return messagesMsg{account: acct.Name, folder: folder, messages: messages, err: err}
+	}
+}
+
 // Update handles terminal events and loader results.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -96,6 +122,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.clampFocus()
 		m.clampFolderScroll()
+		m.clampMessageScroll()
 
 		return m, nil
 
@@ -120,6 +147,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.folderCursor = 0
 		m.folderScroll = 0
 		m.clampFolderScroll()
+
+		return m, nil
+
+	case messagesMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
+
+		m.msgLoading = false
+
+		if msg.err != nil {
+			m.status = msg.err.Error()
+			m.messages = nil
+
+			return m, nil
+		}
+
+		m.messages = sortNewestFirst(msg.messages)
+		m.messageCursor = 0
+		m.messageScroll = 0
+		m.clampMessageScroll()
 
 		return m, nil
 
@@ -148,17 +196,34 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.state = stateConnecting
 		m.status = ""
+		m.messages = nil
+		m.openFolder = ""
+		m.msgLoading = false
 
 		return m, m.reloadCmd()
+
+	case "enter":
+		if m.focus == focusFolders {
+			return m.openSelectedFolder()
+		}
+		if m.focus == focusMessages {
+			m.status = "message body arrives in M2b"
+		}
 
 	case "up", "k":
 		if m.focus == focusFolders {
 			m.moveFolderCursor(-1)
 		}
+		if m.focus == focusMessages {
+			m.moveMessageCursor(-1)
+		}
 
 	case "down", "j":
 		if m.focus == focusFolders {
 			m.moveFolderCursor(1)
+		}
+		if m.focus == focusMessages {
+			m.moveMessageCursor(1)
 		}
 
 	case "home", "g":
@@ -166,15 +231,50 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.folderCursor = 0
 			m.clampFolderScroll()
 		}
+		if m.focus == focusMessages {
+			m.messageCursor = 0
+			m.clampMessageScroll()
+		}
 
 	case "end", "G":
-		if m.focus == focusFolders && len(m.folders) > 0 {
-			m.folderCursor = len(m.folders) - 1
-			m.clampFolderScroll()
-		}
+		m.jumpToEnd()
 	}
 
 	return m, nil
+}
+
+// jumpToEnd moves the active panel's cursor to its last row.
+func (m *Model) jumpToEnd() {
+	if m.focus == focusFolders && len(m.folders) > 0 {
+		m.folderCursor = len(m.folders) - 1
+		m.clampFolderScroll()
+	}
+	if m.focus == focusMessages && len(m.messages) > 0 {
+		m.messageCursor = len(m.messages) - 1
+		m.clampMessageScroll()
+	}
+}
+
+// openSelectedFolder starts loading the folder under the cursor.
+func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
+	folder, ok := m.selectedFolder()
+	if !ok {
+		return m, nil
+	}
+	if !folder.Selectable() {
+		m.status = fmt.Sprintf("%s is a container, not a mailbox", folder.Name)
+		return m, nil
+	}
+
+	m.openFolder = folder.Name
+	m.messages = nil
+	m.messageCursor = 0
+	m.messageScroll = 0
+	m.msgLoading = true
+	m.status = ""
+	m.focus = focusMessages
+
+	return m, m.loadMessagesCmd(folder.Name)
 }
 
 // clampFocus moves focus off a panel the current mode does not draw.
@@ -237,25 +337,26 @@ func (m Model) View() string {
 // renderPanels draws the visible panels for the current mode.
 func (m Model) renderPanels(layout Layout) string {
 	folderBody := m.folderLines(layout.Folders.Height - 1)
+	messageBody := m.messageLines(layout.Messages.Height-1, layout.Messages.Width-(2*PanelPaddingHorizontal))
 
 	switch layout.Mode {
 	case ModeThree:
 		return JoinHorizontal(
 			m.renderPanel("folders", layout.Folders, folderBody),
-			m.renderPanel("messages", layout.Messages, m.messageLines()),
+			m.renderPanel("messages", layout.Messages, messageBody),
 			m.renderPanel("reader", layout.Reader, m.readerLines()),
 		)
 
 	case ModeTwo:
 		return JoinHorizontal(
-			m.renderPanel("messages", layout.Messages, m.messageLines()),
+			m.renderPanel("messages", layout.Messages, messageBody),
 			m.renderPanel("reader", layout.Reader, m.readerLines()),
 		)
 	}
 
 	body := m.folderLines(layout.Reader.Height - 1)
 	if m.focus == focusMessages {
-		body = m.messageLines()
+		body = m.messageLines(layout.Reader.Height-1, layout.Reader.Width-(2*PanelPaddingHorizontal))
 	}
 	if m.focus == focusReader {
 		body = m.readerLines()
@@ -264,40 +365,30 @@ func (m Model) renderPanels(layout Layout) string {
 	return m.renderPanel("chute", layout.Reader, body)
 }
 
-func (m Model) messageLines() []string {
-	if m.state == stateConnecting {
-		return []string{MutedStyle.Render("waiting for folders")}
-	}
-
-	return []string{
-		MutedStyle.Render(fmt.Sprintf("%d folder(s)", len(m.folders))),
-		MutedStyle.Render("message list lands in M2"),
-	}
-}
-
+// readerLines shows the selected message's header. The body arrives in M2b.
 func (m Model) readerLines() []string {
-	folder, ok := m.selectedFolder()
+	msg, ok := m.selectedMessage()
 	if !ok {
-		return []string{MutedStyle.Render("no folder selected")}
+		return []string{MutedStyle.Render("no message selected")}
 	}
 
-	role := "folder"
-	if folder.Role() != mail.RoleNone {
-		role = string(folder.Role())
+	lines := []string{
+		NormalStyle.Render(msg.Subject()),
+		MutedStyle.Render(fmt.Sprintf("from %s", msg.From())),
+		MutedStyle.Render(msg.Date().Local().Format("Mon 02 Jan 2006 15:04")),
+		Blank(1),
+		MutedStyle.Render("body lands in M2b"),
 	}
 
-	return []string{
-		NormalStyle.Render(folder.Name),
-		MutedStyle.Render(role),
-	}
+	return lines
 }
 
 // renderFooter shows the keys that work right now.
 func (m Model) renderFooter() string {
-	hints := "q:quit  tab:next panel  j/k:move  r:reload  a:accounts"
+	hints := "q:quit  tab:panel  j/k:move  enter:open  r:reload"
 
 	if ComputeLayout(m.width, m.height).Mode == ModeTwo {
-		hints = "q:quit  tab:next panel  r:reload  a:accounts  \\:folders"
+		hints = "q:quit  tab:panel  j/k:move  enter:open  r:reload  \\:folders"
 	}
 
 	return MutedStyle.Render(Truncate(hints, ContentWidth(m.width)))
@@ -311,16 +402,23 @@ func (m Model) renderStatusBar() string {
 	case stateConnecting:
 		parts = append(parts, "connecting…")
 	case stateConnected:
-		parts = append(parts, fmt.Sprintf("%d folders", len(m.folders)))
+		parts = append(parts, countLabel(len(m.folders), "folder"))
 	case stateFailed:
 		parts = append(parts, "disconnected")
+	}
+
+	if m.openFolder != "" {
+		parts = append(parts, m.openFolder)
+		if !m.msgLoading {
+			parts = append(parts, countLabel(len(m.messages), "message"))
+		}
 	}
 
 	if m.status != "" {
 		parts = append(parts, m.status)
 	}
 
-	line := Truncate(strings.Join(parts, " "), ContentWidth(m.width))
+	line := Truncate(strings.Join(parts, " · "), ContentWidth(m.width))
 	if m.state == stateFailed {
 		return ErrorStyle.Render(line)
 	}
@@ -335,4 +433,13 @@ func (m Model) accountName() string {
 	}
 
 	return m.cfg.Accounts[m.account].Name
+}
+
+// countLabel renders "1 folder" or "12 folders".
+func countLabel(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+
+	return fmt.Sprintf("%d %ss", n, noun)
 }
