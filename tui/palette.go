@@ -3,12 +3,15 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Palette. Copied from imap-notes tui/palette.go so the two clients look related.
+// Palette. Tuned for a light terminal background, matching how imap-notes actually
+// paints: body text is dark grey (238). The pale 252 in imap-notes' palette file is
+// defined but barely used, and using it as the normal text colour makes everything
+// vanish on a white background.
 var (
-	ColorPrimary     = lipgloss.Color("245") // #888888
-	ColorAccent      = lipgloss.Color("248") // #AAAAAA
-	ColorTextNormal  = lipgloss.Color("252") // #CCCCCC
-	ColorTextMuted   = lipgloss.Color("238") // #444444
+	ColorPrimary     = lipgloss.Color("240") // #585858 borders
+	ColorAccent      = lipgloss.Color("238") // #444444 panel titles, bold
+	ColorTextNormal  = lipgloss.Color("238") // #444444 body text
+	ColorTextMuted   = lipgloss.Color("245") // #888888 secondary text
 	ColorTextSuccess = lipgloss.Color("71")  // #66AA66
 	ColorTextError   = lipgloss.Color("167") // #CC6666
 )
