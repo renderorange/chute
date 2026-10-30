@@ -16,11 +16,19 @@ type loadMessagesFunc func(acct config.Account, folder string) ([]mail.Message, 
 // loadBodyFunc downloads one message body and its attachments.
 type loadBodyFunc func(acct config.Account, folder string, uid imap.UID) (*mail.Body, error)
 
-// loaders groups the three background loaders the model calls.
+// storeFlagsFunc adds or removes flags on a set of messages in one command.
+type storeFlagsFunc func(acct config.Account, folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
+
+// deleteMessagesFunc moves messages to the account's trash mailbox.
+type deleteMessagesFunc func(acct config.Account, folder string, uids []imap.UID) error
+
+// loaders groups the background loaders the model calls.
 type loaders struct {
-	folders  loadFoldersFunc
-	messages loadMessagesFunc
-	body     loadBodyFunc
+	folders        loadFoldersFunc
+	messages       loadMessagesFunc
+	body           loadBodyFunc
+	storeFlags     storeFlagsFunc
+	deleteMessages deleteMessagesFunc
 }
 
 // sessionLoaders binds every loader to one persistent session per account, so
@@ -35,6 +43,12 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		body: func(acct config.Account, folder string, uid imap.UID) (*mail.Body, error) {
 			return manager.For(acct).FetchBody(folder, uid)
+		},
+		storeFlags: func(acct config.Account, folder string, uids []imap.UID, add bool, flags ...imap.Flag) error {
+			return manager.For(acct).StoreFlags(folder, uids, add, flags...)
+		},
+		deleteMessages: func(acct config.Account, folder string, uids []imap.UID) error {
+			return manager.For(acct).Delete(folder, uids)
 		},
 	}
 }
@@ -67,5 +81,24 @@ type bodyMsg struct {
 	folder  string
 	uid     imap.UID
 	body    *mail.Body
+	err     error
+}
+
+// flagsMsg carries the result of one flag change, so the model can update the
+// rows the server confirmed.
+type flagsMsg struct {
+	account string
+	folder  string
+	uids    []imap.UID
+	add     bool
+	flags   []imap.Flag
+	err     error
+}
+
+// deleteMsg carries the result of moving messages to the trash mailbox.
+type deleteMsg struct {
+	account string
+	folder  string
+	uids    []imap.UID
 	err     error
 }

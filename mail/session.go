@@ -2,6 +2,8 @@ package mail
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/emersion/go-imap/v2"
@@ -16,6 +18,8 @@ type sessionClient interface {
 	Folders() ([]Folder, error)
 	FetchEnvelopes(folder string) ([]Message, error)
 	FetchBody(folder string, uid imap.UID) (*Body, error)
+	StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
+	DeleteMessages(folder, trash string, uids []imap.UID) error
 	Close() error
 }
 
@@ -33,6 +37,11 @@ type Session struct {
 	connect connectFunc
 	client  sessionClient
 	closed  bool
+
+	// folders is the last unfiltered listing. Hiding a mailbox with
+	// hide_folders must not make its role unresolvable, so delete still works
+	// when the user hides Trash.
+	folders []Folder
 }
 
 // newSession builds a session that connects through connect when first used.
@@ -56,7 +65,77 @@ func (s *Session) Folders() ([]Folder, error) {
 		return nil, err
 	}
 
+	s.folders = folders
+
 	return FilterFolders(folders, s.acct.IMAP.HideFolders), nil
+}
+
+// RoleFolder resolves the mailbox that serves a role, using the most recent
+// folder listing and the account's [accounts.imap] overrides. It never connects:
+// every action that needs a role runs with a folder open, which means a listing
+// has already happened.
+func (s *Session) RoleFolder(role Role) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	folder, ok := s.roleFolderLocked(role)
+	if !ok {
+		return "", false
+	}
+
+	return folder.Name, true
+}
+
+// roleFolderLocked resolves a role against the cached listing.
+func (s *Session) roleFolderLocked(role Role) (Folder, bool) {
+	return ResolveFolder(s.folders, role, roleOverride(s.acct, role))
+}
+
+// Delete moves messages to the account's trash mailbox, resolved from the last
+// folder listing. Deleting from the trash itself is refused: permanent delete is
+// not part of this milestone.
+func (s *Session) Delete(folder string, uids []imap.UID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	trash, ok := s.roleFolderLocked(RoleTrash)
+	if !ok {
+		return fmt.Errorf("mail: account %q: no mailbox serves the trash role; set [accounts.imap] trash", s.acct.Name)
+	}
+	if strings.EqualFold(folder, trash.Name) {
+		return fmt.Errorf("mail: account %q: %q is already the trash folder", s.acct.Name, folder)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return err
+	}
+
+	if err := client.DeleteMessages(folder, trash.Name, uids); err != nil {
+		s.resetLocked()
+		return err
+	}
+
+	return nil
+}
+
+// roleOverride maps a role onto the account's configured mailbox override. The
+// inbox has none; StartFolder covers that case.
+func roleOverride(acct config.Account, role Role) string {
+	switch role {
+	case RoleSent:
+		return acct.IMAP.Sent
+	case RoleDrafts:
+		return acct.IMAP.Drafts
+	case RoleTrash:
+		return acct.IMAP.Trash
+	case RoleArchive:
+		return acct.IMAP.Archive
+	case RoleJunk:
+		return acct.IMAP.Junk
+	}
+
+	return ""
 }
 
 // FetchEnvelopes loads one folder's message envelopes over the persistent
@@ -96,6 +175,24 @@ func (s *Session) FetchBody(folder string, uid imap.UID) (*Body, error) {
 	}
 
 	return body, nil
+}
+
+// StoreFlags adds or removes flags on every listed message in one command.
+func (s *Session) StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return err
+	}
+
+	if err := client.StoreFlags(folder, uids, add, flags...); err != nil {
+		s.resetLocked()
+		return err
+	}
+
+	return nil
 }
 
 // Close logs out and marks the session unusable.

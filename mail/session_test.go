@@ -2,6 +2,7 @@ package mail
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/emersion/go-imap/v2"
@@ -19,6 +20,16 @@ type fakeClient struct {
 	folder   string
 	uid      imap.UID
 	requests int
+
+	storeFolder string
+	storeUIDs   []imap.UID
+	storeAdd    bool
+	storeFlags  []imap.Flag
+
+	deleteFolder string
+	deleteTrash  string
+	deleteUIDs   []imap.UID
+	deleteErr    error
 }
 
 func (f *fakeClient) Folders() ([]Folder, error) {
@@ -55,6 +66,33 @@ func (f *fakeClient) Close() error {
 	f.closed = true
 
 	return nil
+}
+
+// DeleteMessages records the resolved trash mailbox so session tests can prove
+// the role lookup ran against the unfiltered listing.
+func (f *fakeClient) DeleteMessages(folder, trash string, uids []imap.UID) error {
+	f.requests++
+	f.deleteFolder = folder
+	f.deleteTrash = trash
+	f.deleteUIDs = uids
+
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+
+	return f.err
+}
+
+// StoreFlags records the call so session tests can assert one UID set reached
+// the client unchanged.
+func (f *fakeClient) StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error {
+	f.requests++
+	f.storeFolder = folder
+	f.storeUIDs = uids
+	f.storeAdd = add
+	f.storeFlags = flags
+
+	return f.err
 }
 
 func TestSessionReusesConnection(t *testing.T) {
@@ -218,5 +256,282 @@ func TestSessionHidesFolders(t *testing.T) {
 	}
 	if len(folders) != 1 || folders[0].Name != "INBOX" {
 		t.Errorf("folders = %v, want only INBOX", folders)
+	}
+}
+
+// TestSessionRoleFolderResolvesHiddenTrash proves Trash stays usable when the
+// user hides it from the folder list. Delete would silently break if the role
+// lookup read the filtered list.
+func TestSessionRoleFolderResolvesHiddenTrash(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Trash", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrTrash}},
+	}}
+	acct := config.Account{Name: "fastmail", IMAP: config.IMAP{HideFolders: []string{"Trash"}}}
+	session := newSession(acct, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	folders, err := session.Folders()
+	if err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+	if len(folders) != 1 || folders[0].Name != "INBOX" {
+		t.Fatalf("folders = %v, want Trash hidden", folders)
+	}
+
+	name, ok := session.RoleFolder(RoleTrash)
+	if !ok {
+		t.Fatal("RoleFolder(RoleTrash) found nothing; it read the filtered list")
+	}
+	if name != "Trash" {
+		t.Errorf("trash folder = %q, want Trash", name)
+	}
+}
+
+// TestSessionRoleFolderUsesOverride proves the config override beats the
+// special-use attribute.
+func TestSessionRoleFolderUsesOverride(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "Bin", Delimiter: '/'},
+		{Name: "Trash", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrTrash}},
+	}}
+	acct := config.Account{Name: "fastmail", IMAP: config.IMAP{Trash: "Bin"}}
+	session := newSession(acct, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	name, ok := session.RoleFolder(RoleTrash)
+	if !ok {
+		t.Fatal("RoleFolder(RoleTrash) found nothing")
+	}
+	if name != "Bin" {
+		t.Errorf("trash folder = %q, want the configured Bin", name)
+	}
+}
+
+// TestSessionRoleFolderBeforeListing proves the role lookup never opens its own
+// connection or issues its own LIST mid-action.
+func TestSessionRoleFolderBeforeListing(t *testing.T) {
+	connects := 0
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		connects++
+
+		return &fakeClient{}, nil
+	})
+	defer session.Close()
+
+	if _, ok := session.RoleFolder(RoleTrash); ok {
+		t.Error("RoleFolder(RoleTrash) succeeded with no folder listing")
+	}
+	if connects != 0 {
+		t.Errorf("connect calls = %d, want 0; RoleFolder must not connect", connects)
+	}
+}
+
+// TestSessionRoleFolderMissing proves a server without Trash reports nothing
+// rather than inventing one.
+func TestSessionRoleFolderMissing(t *testing.T) {
+	client := &fakeClient{folders: []Folder{{Name: "INBOX", Delimiter: '/'}}}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	if name, ok := session.RoleFolder(RoleTrash); ok {
+		t.Errorf("RoleFolder(RoleTrash) = %q, want not found", name)
+	}
+}
+
+// TestSessionRoleFolderRefreshesOnReload proves a reload updates the role cache,
+// so a mailbox renamed between reloads is not remembered forever.
+func TestSessionRoleFolderRefreshesOnReload(t *testing.T) {
+	client := &fakeClient{folders: []Folder{{Name: "INBOX", Delimiter: '/'}}}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("first Folders: %v", err)
+	}
+	if _, ok := session.RoleFolder(RoleTrash); ok {
+		t.Fatal("RoleFolder(RoleTrash) found a trash folder before one existed")
+	}
+
+	client.folders = []Folder{{Name: "Trash", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrTrash}}}
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("second Folders: %v", err)
+	}
+
+	name, ok := session.RoleFolder(RoleTrash)
+	if !ok || name != "Trash" {
+		t.Errorf("RoleFolder(RoleTrash) = %q, %v; want Trash, true", name, ok)
+	}
+}
+
+// TestSessionStoreFlagsSendsOneCommand proves a bulk selection reaches the
+// client as one call with every UID intact.
+func TestSessionStoreFlagsSendsOneCommand(t *testing.T) {
+	client := &fakeClient{}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if err := session.StoreFlags("INBOX", []imap.UID{4, 9, 15}, true, imap.FlagSeen); err != nil {
+		t.Fatalf("StoreFlags: %v", err)
+	}
+
+	if client.requests != 1 {
+		t.Errorf("client calls = %d, want 1", client.requests)
+	}
+	if client.storeFolder != "INBOX" {
+		t.Errorf("folder = %q, want INBOX", client.storeFolder)
+	}
+	if len(client.storeUIDs) != 3 {
+		t.Errorf("uids = %v, want three", client.storeUIDs)
+	}
+	if !client.storeAdd {
+		t.Error("add = false, want true")
+	}
+	if len(client.storeFlags) != 1 || client.storeFlags[0] != imap.FlagSeen {
+		t.Errorf("flags = %v, want [\\Seen]", client.storeFlags)
+	}
+}
+
+// TestSessionStoreFlagsDropsConnectionOnError proves a failed write resets the
+// connection, matching the read path.
+func TestSessionStoreFlagsDropsConnectionOnError(t *testing.T) {
+	client := &fakeClient{err: errors.New("store failed")}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if err := session.StoreFlags("INBOX", []imap.UID{1}, true, imap.FlagSeen); err == nil {
+		t.Fatal("StoreFlags returned no error")
+	}
+	if !client.closed {
+		t.Error("the failed client was not closed")
+	}
+}
+
+// TestSessionDeleteResolvesTrash proves delete finds Trash even when the user
+// hides it from the folder list.
+func TestSessionDeleteResolvesTrash(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Trash", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrTrash}},
+	}}
+	acct := config.Account{Name: "fastmail", IMAP: config.IMAP{HideFolders: []string{"Trash"}}}
+	session := newSession(acct, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	if err := session.Delete("INBOX", []imap.UID{7, 8}); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if client.deleteFolder != "INBOX" {
+		t.Errorf("source = %q, want INBOX", client.deleteFolder)
+	}
+	if client.deleteTrash != "Trash" {
+		t.Errorf("trash = %q, want the resolved Trash folder", client.deleteTrash)
+	}
+	if len(client.deleteUIDs) != 2 {
+		t.Errorf("uids = %v, want two", client.deleteUIDs)
+	}
+}
+
+// TestSessionDeleteRefusesInsideTrash proves permanent delete is not reachable by
+// accident: the same key inside Trash does nothing.
+func TestSessionDeleteRefusesInsideTrash(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Trash", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrTrash}},
+	}}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+	requests := client.requests
+
+	err := session.Delete("trash", []imap.UID{1})
+	if err == nil {
+		t.Fatal("Delete inside Trash returned no error")
+	}
+	if !strings.Contains(err.Error(), "already the trash folder") {
+		t.Errorf("error = %q, want it to name the trash folder", err)
+	}
+	if client.requests != requests {
+		t.Error("the refusal still reached the server")
+	}
+}
+
+// TestSessionDeleteWithoutTrash proves a missing trash role is reported before
+// anything is attempted.
+func TestSessionDeleteWithoutTrash(t *testing.T) {
+	client := &fakeClient{folders: []Folder{{Name: "INBOX", Delimiter: '/'}}}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	err := session.Delete("INBOX", []imap.UID{1})
+	if err == nil {
+		t.Fatal("Delete without a trash folder returned no error")
+	}
+	if !strings.Contains(err.Error(), "trash role") {
+		t.Errorf("error = %q, want it to name the missing role", err)
+	}
+}
+
+// TestSessionDeleteDropsConnectionOnError proves a failed delete resets the
+// connection.
+func TestSessionDeleteDropsConnectionOnError(t *testing.T) {
+	client := &fakeClient{
+		folders: []Folder{
+			{Name: "INBOX", Delimiter: '/'},
+			{Name: "Trash", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrTrash}},
+		},
+		deleteErr: errors.New("delete failed"),
+	}
+	session := newSession(config.Account{Name: "fastmail"}, func(config.Account) (sessionClient, error) {
+		return client, nil
+	})
+	defer session.Close()
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+	if err := session.Delete("INBOX", []imap.UID{1}); err == nil {
+		t.Fatal("Delete returned no error")
+	}
+	if !client.closed {
+		t.Error("the failed client was not closed")
 	}
 }

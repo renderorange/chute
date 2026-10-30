@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
 )
@@ -56,15 +57,25 @@ type Model struct {
 	loadingBody  bodyKey
 	readerScroll int
 
+	visualAnchor   int
+	markSeenOnLoad bodyKey
+
 	attachOpen   bool
 	attachCursor int
 
 	foldersOpen         bool
 	folderOverlayCursor int
 
-	loadFolders  loadFoldersFunc
-	loadMessages loadMessagesFunc
-	loadBody     loadBodyFunc
+	confirmOpen   bool
+	pendingDelete []imap.UID
+
+	loadFolders    loadFoldersFunc
+	loadMessages   loadMessagesFunc
+	loadBody       loadBodyFunc
+	storeFlags     storeFlagsFunc
+	deleteMessages deleteMessagesFunc
+
+	keys bindings
 }
 
 // New builds the root model for a loaded config.
@@ -73,14 +84,18 @@ func New(cfg *config.Config, version string) Model {
 	load := sessionLoaders(sessions)
 
 	m := Model{
-		version:      version,
-		cfg:          cfg,
-		state:        stateConnecting,
-		sessions:     sessions,
-		loadFolders:  load.folders,
-		loadMessages: load.messages,
-		loadBody:     load.body,
-		bodies:       make(map[bodyKey]*mail.Body),
+		version:        version,
+		cfg:            cfg,
+		state:          stateConnecting,
+		sessions:       sessions,
+		loadFolders:    load.folders,
+		loadMessages:   load.messages,
+		loadBody:       load.body,
+		storeFlags:     load.storeFlags,
+		deleteMessages: load.deleteMessages,
+		bodies:         make(map[bodyKey]*mail.Body),
+		visualAnchor:   noVisualAnchor,
+		keys:           defaultBindings(),
 	}
 
 	for i := range cfg.Accounts {
@@ -215,6 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.messages = sortNewestFirst(msg.messages)
 		m.messageCursor = 0
 		m.messageScroll = 0
+		m.visualAnchor = noVisualAnchor
 		m.clampMessageScroll()
 
 		return m, nil
@@ -240,6 +256,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bodies[key] = msg.body
 		m.clampReaderScroll()
 
+		// Opening a message marks it read. The command is a separate STORE, so
+		// fetching a body still never changes a flag.
+		if m.markSeenOnLoad == key {
+			m.markSeenOnLoad = bodyKey{}
+
+			return m, m.markSeenCmd(msg.uid, false)
+		}
+
 		return m, nil
 
 	case attachmentSavedMsg:
@@ -248,6 +272,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "saved " + msg.path
+
+		return m, nil
+
+	case flagsMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.status = msg.err.Error()
+			return m, nil
+		}
+
+		m.applyFlags(msg.uids, msg.flags, msg.add)
+		m.visualAnchor = noVisualAnchor
+		m.status = ""
+
+		return m, nil
+
+	case deleteMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.status = msg.err.Error()
+			return m, nil
+		}
+
+		m.removeDeleted(msg.uids)
+		m.status = fmt.Sprintf("moved %s to trash", countLabel(len(msg.uids), "message"))
 
 		return m, nil
 
@@ -260,6 +315,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey applies a single keypress.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirmOpen {
+		return m.handleConfirmKey(msg)
+	}
 	if m.attachOpen {
 		return m.handleAttachKey(msg)
 	}
@@ -267,14 +325,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFoldersKey(msg)
 	}
 
-	switch msg.String() {
-	case "q", "ctrl+c":
+	switch m.keys.resolve(msg.String()) {
+	case actionQuit:
 		return m, tea.Quit
 
-	case "tab":
+	case actionNextPanel:
 		m.focus = m.nextFocus()
 
-	case "esc":
+	case actionBack:
+		if m.visualActive() {
+			m.visualAnchor = noVisualAnchor
+			break
+		}
 		switch {
 		case m.focus == focusReader:
 			m.focus = focusMessages
@@ -283,10 +345,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.status = ""
 
-	case "a":
+	case actionAccount:
 		m.status = "account selector arrives in M6"
 
-	case "r":
+	case actionReload:
 		m.state = stateConnecting
 		m.status = ""
 		m.messages = nil
@@ -295,6 +357,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.bodies = make(map[bodyKey]*mail.Body)
 		m.loadingBody = bodyKey{}
 		m.readerScroll = 0
+		m.visualAnchor = noVisualAnchor
 		m.attachOpen = false
 		m.attachCursor = 0
 		m.foldersOpen = false
@@ -302,7 +365,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, m.reloadCmd()
 
-	case "enter":
+	case actionOpen:
 		if m.focus == focusFolders {
 			return m.openSelectedFolder()
 		}
@@ -310,13 +373,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.openSelectedMessage()
 		}
 
-	case "s":
+	case actionAttachments:
 		return m.openAttachments()
 
-	case "\\":
+	case actionFoldersOverlay:
 		return m.openFolders()
 
-	case "up", "k":
+	case actionToggleRead:
+		return m.toggleRead()
+
+	case actionToggleFlag:
+		return m.toggleFlag()
+
+	case actionDelete:
+		return m.beginDelete()
+
+	case actionVisualRange:
+		m.toggleVisual()
+
+	case actionUp:
 		switch m.focus {
 		case focusFolders:
 			m.moveFolderCursor(-1)
@@ -326,7 +401,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.moveReaderScroll(-1)
 		}
 
-	case "down", "j":
+	case actionDown:
 		switch m.focus {
 		case focusFolders:
 			m.moveFolderCursor(1)
@@ -336,7 +411,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.moveReaderScroll(1)
 		}
 
-	case "home", "g":
+	case actionTop:
 		switch m.focus {
 		case focusFolders:
 			m.folderCursor = 0
@@ -348,7 +423,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.readerScroll = 0
 		}
 
-	case "end", "G":
+	case actionBottom:
 		m.jumpToEnd()
 	}
 
@@ -391,6 +466,7 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 	m.focus = focusMessages
 	m.loadingBody = bodyKey{}
 	m.readerScroll = 0
+	m.visualAnchor = noVisualAnchor
 	m.attachOpen = false
 	m.attachCursor = 0
 	m.foldersOpen = false
@@ -412,7 +488,7 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	m.focus = focusReader
 
 	if _, cached := m.bodyFor(key); cached {
-		return m, nil
+		return m, m.markSeenCmd(msg.UID, msg.Seen())
 	}
 	if m.loadingBody == key {
 		return m, nil
@@ -421,6 +497,13 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	m.loadingBody = key
 	m.readerScroll = 0
 	m.status = ""
+
+	// The body load returns first; the \Seen command follows in bodyMsg. Both
+	// cannot be batched here because a batch resolves to one BatchMsg, which
+	// makes the follow-up untestable and hides which command failed.
+	if !msg.Seen() {
+		m.markSeenOnLoad = key
+	}
 
 	return m, m.loadBodyCmd(key)
 }
@@ -510,6 +593,10 @@ func (m Model) View() string {
 	layout := ComputeLayout(m.width, m.height)
 	panels := m.renderPanels(layout)
 	switch {
+	case m.confirmOpen:
+		if modal := m.renderConfirmModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
 	case m.attachOpen:
 		if modal := m.renderAttachmentModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal
@@ -564,13 +651,15 @@ func (m Model) renderPanels(layout Layout) string {
 
 // renderFooter shows the keys that work right now.
 func (m Model) renderFooter() string {
-	hints := "q:quit  j/k:move  enter:open  esc:back  tab:panel  s:attach  r:reload  \\:folders"
+	hints := "q:quit  j/k:move  enter:open  esc:back  \\:folders  m:read  f:flag  d:delete  v:range  s:attach  r:reload"
 
 	switch {
 	case m.attachOpen:
 		hints = "j/k:choose  enter:save  esc:close"
 	case m.foldersOpen:
 		hints = "j/k:choose  enter:open  esc:close"
+	case m.visualActive():
+		hints = "j/k:extend  m:read  f:flag  d:delete  esc:cancel"
 	}
 
 	return MutedStyle.Render(Truncate(hints, ContentWidth(m.width)))

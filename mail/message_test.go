@@ -36,6 +36,37 @@ func TestMessageHelpers(t *testing.T) {
 	}
 }
 
+// TestMessageSetFlag proves the local mirror of a confirmed server change adds,
+// removes and stays idempotent.
+func TestMessageSetFlag(t *testing.T) {
+	m := Message{UID: 1}
+
+	m.SetFlag(imap.FlagSeen, true)
+	if !m.Seen() {
+		t.Fatal("SetFlag(+Seen) did not add the flag")
+	}
+
+	m.SetFlag(imap.FlagSeen, true)
+	if got := len(m.Flags); got != 1 {
+		t.Errorf("flags = %v, want one entry after a repeated add", m.Flags)
+	}
+
+	m.SetFlag(imap.FlagSeen, false)
+	if m.Seen() {
+		t.Error("SetFlag(-Seen) did not remove the flag")
+	}
+
+	m.SetFlag(imap.FlagSeen, false)
+	if got := len(m.Flags); got != 0 {
+		t.Errorf("flags = %v, want empty after a repeated remove", m.Flags)
+	}
+
+	m.SetFlag(imap.FlagFlagged, true)
+	if !m.Flagged() {
+		t.Error("SetFlag(+Flagged) did not add the flag")
+	}
+}
+
 func TestMessageDefaults(t *testing.T) {
 	envelope := imap.Envelope{From: []imap.Address{{Mailbox: "noreply", Host: "example.org"}}}
 	internal := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)

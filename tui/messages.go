@@ -136,6 +136,9 @@ func (m Model) messageLine(index, width int) string {
 	if index == m.messageCursor {
 		return SelectedStyle.Render(line)
 	}
+	if m.inVisual(index) {
+		return SelectedStyle.Render(line)
+	}
 	if !msg.Seen() {
 		return UnreadStyle.Render(line)
 	}

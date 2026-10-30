@@ -42,20 +42,20 @@ func (m Model) handleAttachKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch msg.String() {
-	case "ctrl+c":
+	switch m.keys.resolve(msg.String()) {
+	case actionQuit:
 		return m, tea.Quit
 
-	case "esc", "q":
+	case actionBack:
 		m.attachOpen = false
 
-	case "up", "k":
+	case actionUp:
 		m.attachCursor = max(0, m.attachCursor-1)
 
-	case "down", "j":
+	case actionDown:
 		m.attachCursor = min(m.attachCursor+1, len(body.Attachments)-1)
 
-	case "enter", "s":
+	case actionOpen, actionAttachments:
 		return m.saveSelectedAttachment(body)
 	}
 
