@@ -68,10 +68,7 @@ func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
 		return nil, fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
 	}
 
-	seqset := new(imap.SeqSet)
-	seqset.AddRange(1, 0)
-
-	cmd := c.conn.Fetch(seqset, &imap.FetchOptions{
+	cmd := c.conn.Fetch(allMessages(), &imap.FetchOptions{
 		Envelope:     true,
 		Flags:        true,
 		InternalDate: true,
@@ -86,6 +83,16 @@ func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
 	}
 
 	return messagesFromBuffers(buffers), nil
+}
+
+// allMessages is the sequence set covering an entire folder. It must be a value
+// SeqSet: go-imap's imapwire.NumSetKind type-switches on the value type and
+// panics on a *imap.SeqSet, which crashed the UI when a folder opened.
+func allMessages() imap.NumSet {
+	var seqset imap.SeqSet
+	seqset.AddRange(1, 0)
+
+	return seqset
 }
 
 // messagesFromBuffers converts protocol data into messages, in server order.
