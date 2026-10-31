@@ -161,3 +161,30 @@ func TestMessagesFromBuffersThreadingHeaders(t *testing.T) {
 		t.Errorf("InReplyTo for a root = %v, want empty", got)
 	}
 }
+
+// TestMessageAddressAccessors proves the reply builders get full addresses while the
+// list column keeps the display name.
+func TestMessageAddressAccessors(t *testing.T) {
+	msg := Message{Envelope: imap.Envelope{
+		From: []imap.Address{{Name: "Sender", Mailbox: "sender", Host: "example.org"}},
+		To:   []imap.Address{{Name: "Other", Mailbox: "other", Host: "example.org"}, {Mailbox: "bare", Host: "example.org"}},
+		Cc:   []imap.Address{{Name: "Carbon", Mailbox: "carbon", Host: "example.org"}},
+	}}
+
+	if got, want := msg.From(), "Sender"; got != want {
+		t.Errorf("From() = %q, want the display name %q", got, want)
+	}
+	if got, want := msg.FromAddress(), "Sender <sender@example.org>"; got != want {
+		t.Errorf("FromAddress() = %q, want %q", got, want)
+	}
+
+	to := msg.ToAddresses()
+	if len(to) != 2 || to[0] != "Other <other@example.org>" || to[1] != "bare@example.org" {
+		t.Errorf("ToAddresses() = %v", to)
+	}
+
+	cc := msg.CcAddresses()
+	if len(cc) != 1 || cc[0] != "Carbon <carbon@example.org>" {
+		t.Errorf("CcAddresses() = %v", cc)
+	}
+}

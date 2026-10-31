@@ -47,6 +47,16 @@ func bodySection() *imap.FetchItemBodySection {
 // FetchBody downloads one message and decodes its text and attachments. It opens
 // the folder first, because M2b still uses a connection per operation.
 func (c *Client) FetchBody(folder string, uid imap.UID) (*Body, error) {
+	raw, err := c.fetchRaw(folder, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseBody(raw)
+}
+
+// fetchRaw downloads one message's bytes without setting \Seen.
+func (c *Client) fetchRaw(folder string, uid imap.UID) ([]byte, error) {
 	if _, err := c.conn.Select(folder, nil).Wait(); err != nil {
 		return nil, fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
 	}
@@ -70,7 +80,29 @@ func (c *Client) FetchBody(folder string, uid imap.UID) (*Body, error) {
 		return nil, fmt.Errorf("mail: account %q: message %d in %q returned no body", c.account, uid, folder)
 	}
 
-	return parseBody(raw)
+	return raw, nil
+}
+
+// Append stores msg in folder with the given flags. It reports the new UID and whether
+// the server supplied one: APPENDUID is a UIDPLUS extension, and without it the caller
+// has no way to name the message it just wrote.
+func (c *Client) Append(folder string, flags []imap.Flag, msg []byte) (imap.UID, bool, error) {
+	cmd := c.conn.Append(folder, int64(len(msg)), &imap.AppendOptions{Flags: flags})
+
+	if _, err := cmd.Write(msg); err != nil {
+		cmd.Close()
+		return 0, false, fmt.Errorf("mail: account %q: appending to %q: %w", c.account, folder, err)
+	}
+	if err := cmd.Close(); err != nil {
+		return 0, false, fmt.Errorf("mail: account %q: appending to %q: %w", c.account, folder, err)
+	}
+
+	data, err := cmd.Wait()
+	if err != nil {
+		return 0, false, fmt.Errorf("mail: account %q: appending to %q: %w", c.account, folder, err)
+	}
+
+	return data.UID, data.UID != 0, nil
 }
 
 // parseBody walks a raw RFC 5322 message and keeps its text and attachments.

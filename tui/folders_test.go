@@ -211,7 +211,7 @@ func TestFolderLineTruncates(t *testing.T) {
 func TestReloadKeyStartsLoad(t *testing.T) {
 	m := loaded(t, 140, 40, sampleFolders(3), nil)
 
-	next, cmd := m.Update(keyMsg("r"))
+	next, cmd := m.Update(keyMsg("ctrl+r"))
 	if got := next.(Model).state; got != stateConnecting {
 		t.Errorf("state after r = %v, want connecting", got)
 	}

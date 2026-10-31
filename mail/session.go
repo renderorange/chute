@@ -13,11 +13,18 @@ import (
 // errSessionClosed is returned when a session is used after Close.
 var errSessionClosed = errors.New("mail: session is closed")
 
+// ErrNoRoleFolder reports that no mailbox serves a role and no override names one.
+// Callers match it with errors.Is to distinguish "cannot file a copy" from a real
+// protocol failure.
+var ErrNoRoleFolder = errors.New("mail: no mailbox serves the role")
+
 // sessionClient is the connected-client surface a session reuses.
 type sessionClient interface {
 	Folders() ([]Folder, error)
 	FetchEnvelopes(folder string) ([]Message, error)
 	FetchBody(folder string, uid imap.UID) (*Body, error)
+	FetchCompose(folder string, uid imap.UID) (*Compose, error)
+	Append(folder string, flags []imap.Flag, msg []byte) (imap.UID, bool, error)
 	StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
 	DeleteMessages(folder, trash string, uids []imap.UID) error
 	Close() error
@@ -193,6 +200,89 @@ func (s *Session) StoreFlags(folder string, uids []imap.UID, add bool, flags ...
 	}
 
 	return nil
+}
+
+// FetchCompose loads one message as an outgoing message, so a draft reopens in the
+// composer.
+func (s *Session) FetchCompose(folder string, uid imap.UID) (*Compose, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	compose, err := client.FetchCompose(folder, uid)
+	if err != nil {
+		s.resetLocked()
+		return nil, err
+	}
+
+	return compose, nil
+}
+
+// SaveDraft appends msg to folder as a draft. The boolean reports whether the server
+// named the new UID; without UIDPLUS it cannot, and the caller then has no way to
+// remove that draft later.
+func (s *Session) SaveDraft(folder string, msg []byte) (imap.UID, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if strings.TrimSpace(folder) == "" {
+		return 0, false, fmt.Errorf("mail: account %q: no drafts mailbox is configured", s.acct.Name)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return 0, false, err
+	}
+
+	uid, known, err := client.Append(folder, []imap.Flag{imap.FlagDraft, imap.FlagSeen}, msg)
+	if err != nil {
+		s.resetLocked()
+		return 0, false, err
+	}
+
+	return uid, known, nil
+}
+
+// AppendSent files a copy of msg in the account's sent mailbox. It resolves the role
+// itself and returns ErrNoRoleFolder when neither an override nor the \Sent attribute
+// names one, so the caller can send anyway and say the copy was not filed.
+func (s *Session) AppendSent(msg []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sent, ok := s.roleFolderLocked(RoleSent)
+	if !ok {
+		return fmt.Errorf("%w: account %q: set [accounts.imap] sent", ErrNoRoleFolder, s.acct.Name)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return err
+	}
+
+	if _, _, err := client.Append(sent.Name, []imap.Flag{imap.FlagSeen}, msg); err != nil {
+		s.resetLocked()
+		return err
+	}
+
+	return nil
+}
+
+// DraftsFolder resolves the drafts mailbox from the last folder listing.
+func (s *Session) DraftsFolder() (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	folder, ok := s.roleFolderLocked(RoleDrafts)
+	if !ok {
+		return "", false
+	}
+
+	return folder.Name, true
 }
 
 // Close logs out and marks the session unusable.

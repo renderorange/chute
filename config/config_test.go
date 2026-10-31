@@ -361,3 +361,56 @@ func TestStartFolderName(t *testing.T) {
 		})
 	}
 }
+
+// TestReplyPositionDefaultsToTop reads the field the composer reads, so removing the
+// default fails here rather than silently changing where replies start.
+func TestReplyPositionDefaultsToTop(t *testing.T) {
+	cfg, err := Load(writeConfig(t, validConfig, 0o600))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := cfg.General.ReplyPosition; got != "top" {
+		t.Errorf("ReplyPosition = %q, want %q", got, "top")
+	}
+	if cfg.General.ReplyAtBottom() {
+		t.Error("ReplyAtBottom() is true for the default")
+	}
+}
+
+// TestReplyPositionNormalizesCase proves the value is stored canonically, so the
+// composer can compare it without knowing what the user typed.
+func TestReplyPositionNormalizesCase(t *testing.T) {
+	body := strings.Replace(validConfig, "poll_interval = 30",
+		"poll_interval = 30\nreply_position = \"Bottom\"", 1)
+
+	cfg, err := Load(writeConfig(t, body, 0o600))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := cfg.General.ReplyPosition; got != "bottom" {
+		t.Errorf("ReplyPosition = %q, want %q", got, "bottom")
+	}
+	if !cfg.General.ReplyAtBottom() {
+		t.Error("ReplyAtBottom() is false for reply_position = bottom")
+	}
+}
+
+// TestReplyPositionRejectsUnknown proves a typo fails at load time and names both
+// accepted values, rather than falling back to a default the user did not ask for.
+func TestReplyPositionRejectsUnknown(t *testing.T) {
+	body := strings.Replace(validConfig, "poll_interval = 30",
+		"poll_interval = 30\nreply_position = \"middle\"", 1)
+
+	_, err := Load(writeConfig(t, body, 0o600))
+	if err == nil {
+		t.Fatal("Load accepted reply_position = middle")
+	}
+
+	for _, want := range []string{"reply_position", "top", "bottom"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err, want)
+		}
+	}
+}

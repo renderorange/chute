@@ -30,6 +30,19 @@ type fakeClient struct {
 	deleteTrash  string
 	deleteUIDs   []imap.UID
 	deleteErr    error
+
+	compose     *Compose
+	appendCalls []appendCall
+	appendErr   error
+	appendUID   imap.UID
+}
+
+// appendCall records one APPEND so a test can assert the folder, the flags and the
+// bytes that went to the server.
+type appendCall struct {
+	folder string
+	flags  []imap.Flag
+	msg    []byte
 }
 
 func (f *fakeClient) Folders() ([]Folder, error) {
@@ -66,6 +79,34 @@ func (f *fakeClient) Close() error {
 	f.closed = true
 
 	return nil
+}
+
+// FetchCompose returns the canned compose value.
+func (f *fakeClient) FetchCompose(folder string, uid imap.UID) (*Compose, error) {
+	f.requests++
+	f.folder = folder
+	f.uid = uid
+
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.compose, nil
+}
+
+// Append records the folder, flags and bytes, and reports the canned UID.
+func (f *fakeClient) Append(folder string, flags []imap.Flag, msg []byte) (imap.UID, bool, error) {
+	f.requests++
+	f.appendCalls = append(f.appendCalls, appendCall{folder: folder, flags: flags, msg: msg})
+
+	if f.appendErr != nil {
+		return 0, false, f.appendErr
+	}
+	if f.err != nil {
+		return 0, false, f.err
+	}
+
+	return f.appendUID, f.appendUID != 0, nil
 }
 
 // DeleteMessages records the resolved trash mailbox so session tests can prove

@@ -40,7 +40,22 @@ type General struct {
 	// DownloadDir is where attachments are saved. A leading ~ is expanded; an
 	// empty value means ~/Downloads.
 	DownloadDir string `toml:"download_dir"`
+
+	// ReplyPosition places the cursor when composing a reply: "top" writes above
+	// the quoted original, "bottom" below it. Normalized to lower case on load.
+	ReplyPosition string `toml:"reply_position"`
 }
+
+// ReplyAtBottom reports whether replies start below the quoted original.
+func (g General) ReplyAtBottom() bool {
+	return g.ReplyPosition == ReplyPositionBottom
+}
+
+// Accepted reply_position values.
+const (
+	ReplyPositionTop    = "top"
+	ReplyPositionBottom = "bottom"
+)
 
 // Account is one mail account.
 type Account struct {
@@ -125,6 +140,11 @@ func (c *Config) applyDefaults() {
 		c.General.PollInterval = 60
 	}
 
+	if c.General.ReplyPosition == "" {
+		c.General.ReplyPosition = ReplyPositionTop
+	}
+	c.General.ReplyPosition = strings.ToLower(strings.TrimSpace(c.General.ReplyPosition))
+
 	for i := range c.Accounts {
 		is := &c.Accounts[i].IMAP
 		if is.Port == 0 {
@@ -158,6 +178,13 @@ func (c *Config) applyDefaults() {
 func (c *Config) validate() error {
 	if len(c.Accounts) == 0 {
 		return errors.New("config: at least one [[accounts]] entry is required")
+	}
+
+	switch c.General.ReplyPosition {
+	case ReplyPositionTop, ReplyPositionBottom:
+	default:
+		return fmt.Errorf("config: general.reply_position is %q, want %q or %q",
+			c.General.ReplyPosition, ReplyPositionTop, ReplyPositionBottom)
 	}
 
 	seen := make(map[string]bool, len(c.Accounts))

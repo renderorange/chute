@@ -219,7 +219,7 @@ func TestMessageLoadError(t *testing.T) {
 func TestReloadClearsOpenFolder(t *testing.T) {
 	m := openInbox(t, withInbox(t, sampleMessages(2), nil))
 
-	next, _ := m.Update(keyMsg("r"))
+	next, _ := m.Update(keyMsg("ctrl+r"))
 	got := next.(Model)
 
 	if got.openFolder != "" {

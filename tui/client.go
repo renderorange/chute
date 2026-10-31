@@ -22,6 +22,21 @@ type storeFlagsFunc func(acct config.Account, folder string, uids []imap.UID, ad
 // deleteMessagesFunc moves messages to the account's trash mailbox.
 type deleteMessagesFunc func(acct config.Account, folder string, uids []imap.UID) error
 
+// fetchComposeFunc reads one message as an editable draft.
+type fetchComposeFunc func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error)
+
+// saveDraftFunc appends a message to the account's drafts mailbox.
+type saveDraftFunc func(acct config.Account, folder string, msg []byte) (imap.UID, bool, error)
+
+// appendSentFunc files a copy of a sent message in the account's sent mailbox.
+type appendSentFunc func(acct config.Account, msg []byte) error
+
+// sendMessageFunc delivers a message over SMTP.
+type sendMessageFunc func(acct config.Account, msg []byte) error
+
+// draftsFolderFunc resolves the account's drafts mailbox from its last listing.
+type draftsFolderFunc func(acct config.Account) (string, bool)
+
 // loaders groups the background loaders the model calls.
 type loaders struct {
 	folders        loadFoldersFunc
@@ -29,6 +44,12 @@ type loaders struct {
 	body           loadBodyFunc
 	storeFlags     storeFlagsFunc
 	deleteMessages deleteMessagesFunc
+
+	fetchCompose     fetchComposeFunc
+	saveDraft        saveDraftFunc
+	appendSent       appendSentFunc
+	sendMessage      sendMessageFunc
+	findDraftsFolder draftsFolderFunc
 }
 
 // sessionLoaders binds every loader to one persistent session per account, so
@@ -49,6 +70,26 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		deleteMessages: func(acct config.Account, folder string, uids []imap.UID) error {
 			return manager.For(acct).Delete(folder, uids)
+		},
+		fetchCompose: func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error) {
+			return manager.For(acct).FetchCompose(folder, uid)
+		},
+		saveDraft: func(acct config.Account, folder string, msg []byte) (imap.UID, bool, error) {
+			return manager.For(acct).SaveDraft(folder, msg)
+		},
+		appendSent: func(acct config.Account, msg []byte) error {
+			return manager.For(acct).AppendSent(msg)
+		},
+		sendMessage: func(acct config.Account, msg []byte) error {
+			password, err := acct.SMTPPassword()
+			if err != nil {
+				return err
+			}
+
+			return mail.SendMessage(acct, password, msg)
+		},
+		findDraftsFolder: func(acct config.Account) (string, bool) {
+			return manager.For(acct).DraftsFolder()
 		},
 	}
 }
