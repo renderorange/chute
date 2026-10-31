@@ -35,28 +35,54 @@ func (m Model) readerInnerWidth() int {
 	return width
 }
 
-// readerLines renders the selected message: headers, body text and the
-// attachment list. The body is cached once loaded, so re-selecting is instant.
+// readerLines renders the conversation the cursor is in: every message, oldest
+// first, with the body expanded under the message the cursor is on. Bodies are
+// cached per message, so walking a thread costs one fetch per reply.
 func (m Model) readerLines(width int) []string {
 	msg, ok := m.selectedMessage()
 	if !ok {
 		return []string{MutedStyle.Render("no message selected")}
 	}
 
-	lines := []string{
-		NormalStyle.Render(Truncate(msg.Subject(), width)),
-		MutedStyle.Render(Truncate("from "+msg.From(), width)),
-		MutedStyle.Render(msg.Date().Local().Format("Mon 02 Jan 2006 15:04")),
+	thread := m.currentThread()
+	key := m.selectedBodyKey()
+
+	lines := make([]string, 0, 8)
+	for i, row := range m.rows {
+		if row.Thread != thread {
+			continue
+		}
+		if i != m.messageCursor {
+			lines = append(lines, threadLine(row.Message, width))
+			continue
+		}
+
+		lines = append(lines,
+			NormalStyle.Render(Truncate(row.Message.Subject(), width)),
+			MutedStyle.Render(Truncate("from "+row.Message.From(), width)),
+			MutedStyle.Render(row.Message.Date().Local().Format("Mon 02 Jan 2006 15:04")),
+		)
+		lines = append(lines, m.bodyLines(key, width)...)
 	}
 
-	key := m.selectedBodyKey()
+	// selectedMessage succeeded, so the loop always emitted the expanded message;
+	// the fallback keeps the reader honest if that ever stops being true.
+	if len(lines) == 0 {
+		return []string{NormalStyle.Render(Truncate(msg.Subject(), width))}
+	}
+
+	return lines
+}
+
+// bodyLines renders the expanded message's body and attachments.
+func (m Model) bodyLines(key bodyKey, width int) []string {
 	if m.loadingBody == key {
-		return append(lines, Blank(1), MutedStyle.Render("loading the body..."))
+		return []string{Blank(1), MutedStyle.Render("loading the body...")}
 	}
 
 	body, ok := m.bodyFor(key)
 	if !ok {
-		return append(lines, Blank(1), MutedStyle.Render("enter to load the body"))
+		return []string{Blank(1), MutedStyle.Render("enter to load the body")}
 	}
 
 	text := body.Text
@@ -64,7 +90,7 @@ func (m Model) readerLines(width int) []string {
 		text = "(no text body)"
 	}
 
-	lines = append(lines, Blank(1))
+	lines := []string{Blank(1)}
 	for _, line := range wrapText(text, width) {
 		lines = append(lines, NormalStyle.Render(line))
 	}
@@ -79,6 +105,24 @@ func (m Model) readerLines(width int) []string {
 	}
 
 	return lines
+}
+
+// currentThread is the conversation the cursor sits in, or -1 when there is no
+// message list.
+func (m Model) currentThread() int {
+	if m.messageCursor < 0 || m.messageCursor >= len(m.rows) {
+		return -1
+	}
+
+	return m.rows[m.messageCursor].Thread
+}
+
+// threadLine is the one-line header shown for the other messages of a thread.
+func threadLine(msg mail.Message, width int) string {
+	date := msg.Date().Local().Format("Jan 02")
+	label := fmt.Sprintf("%s  %s  %s", date, msg.From(), msg.Subject())
+
+	return MutedStyle.Render(Truncate(label, width))
 }
 
 // readerWindow slices the reader content to the scroll offset and panel height.

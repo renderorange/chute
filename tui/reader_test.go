@@ -100,6 +100,42 @@ func TestReaderListsAttachments(t *testing.T) {
 	}
 }
 
+// TestReaderShowsThread proves the reader draws the whole conversation, oldest
+// first, with the body under the message the cursor is on and no other body.
+func TestReaderShowsThread(t *testing.T) {
+	parent := threadMessage(1, "parent subject", "<p>", 1)
+	reply := threadMessage(2, "reply subject", "<r>", 2, "<p>")
+	reply2 := threadMessage(3, "reply two subject", "<r2>", 3, "<r>")
+
+	m := loadedBody(t, []mail.Message{parent, reply, reply2}, &mail.Body{Text: "the reply body"})
+
+	// The cursor starts on the first row, so move it to the middle message.
+	next, _ := m.Update(keyMsg("j"))
+	m = next.(Model)
+
+	// Cache only the expanded message's body.
+	m.bodies = map[bodyKey]*mail.Body{
+		{account: "fastmail", folder: "INBOX", uid: 2}: {Text: "the reply body"},
+	}
+
+	text := strings.Join(m.readerLines(m.readerInnerWidth()), "\n")
+
+	for _, want := range []string{"parent subject", "reply subject", "reply two subject"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("reader missing %q from the thread:\n%s", want, text)
+		}
+	}
+	if got := strings.Count(text, "the reply body"); got != 1 {
+		t.Errorf("body appears %d times, want once:\n%s", got, text)
+	}
+	if !strings.Contains(text, "02 Oct 2026") {
+		t.Errorf("the expanded message lost its full date header:\n%s", text)
+	}
+	if strings.Index(text, "parent subject") > strings.Index(text, "reply subject") {
+		t.Errorf("the thread is not oldest first:\n%s", text)
+	}
+}
+
 func TestReaderScrollsBody(t *testing.T) {
 	body := &mail.Body{Text: strings.Repeat("body line\n", 200)}
 	m := openSelectedBody(t, loadedBody(t, sampleMessages(1), body))

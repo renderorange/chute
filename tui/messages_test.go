@@ -240,6 +240,7 @@ func TestMessageLineFitsWidth(t *testing.T) {
 			Date:    time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC),
 		},
 	}}
+	m.rows = BuildRows(m.messages)
 
 	for _, width := range []int{38, 44, 52, 97} {
 		line := m.messageLine(0, width)
@@ -270,5 +271,29 @@ func TestPadColumn(t *testing.T) {
 				t.Errorf("padColumn(%q, %d) width = %d, want %d", tc.in, tc.width, got, tc.width)
 			}
 		})
+	}
+}
+
+// TestSortNewestFirstUsesDate pins the sort key: date descending, with UID
+// descending as the tiebreak. UID alone is arrival order, so an old message moved
+// into the folder gets a high UID and would otherwise sort as the newest.
+func TestSortNewestFirstUsesDate(t *testing.T) {
+	oct1 := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	oct3 := time.Date(2026, 10, 3, 9, 0, 0, 0, time.UTC)
+
+	movedIn := mail.Message{UID: 9, Envelope: imap.Envelope{Subject: "moved in", Date: oct1}}
+	newest := mail.Message{UID: 5, Envelope: imap.Envelope{Subject: "newest", Date: oct3}}
+	sameDay := mail.Message{UID: 4, Envelope: imap.Envelope{Subject: "same day", Date: oct3}}
+
+	got := sortNewestFirst([]mail.Message{movedIn, newest, sameDay})
+
+	want := []imap.UID{5, 4, 9}
+	if len(got) != len(want) {
+		t.Fatalf("sorted %d messages, want %d", len(got), len(want))
+	}
+	for i, uid := range want {
+		if got[i].UID != uid {
+			t.Errorf("position %d = UID %d (%q), want UID %d", i, got[i].UID, got[i].Subject(), uid)
+		}
 	}
 }

@@ -24,6 +24,8 @@ const (
 	actionToggleFlag
 	actionDelete
 	actionVisualRange
+	actionNextThreadMessage
+	actionPrevThreadMessage
 )
 
 // bindings maps each intent to the keys that trigger it in any mode.
@@ -34,23 +36,25 @@ type bindings map[action][]string
 // from the main view but only closes a modal; actionForceQuit always leaves.
 func defaultBindings() bindings {
 	return bindings{
-		actionQuit:           {"q"},
-		actionForceQuit:      {"ctrl+c"},
-		actionNextPanel:      {"tab"},
-		actionBack:           {"esc"},
-		actionUp:             {"up", "k"},
-		actionDown:           {"down", "j"},
-		actionTop:            {"home", "g"},
-		actionBottom:         {"end", "G"},
-		actionOpen:           {"enter"},
-		actionAttachments:    {"s"},
-		actionFoldersOverlay: {"\\"},
-		actionReload:         {"r"},
-		actionAccount:        {"a"},
-		actionToggleRead:     {"m"},
-		actionToggleFlag:     {"f"},
-		actionDelete:         {"d"},
-		actionVisualRange:    {"v"},
+		actionQuit:              {"q"},
+		actionForceQuit:         {"ctrl+c"},
+		actionNextPanel:         {"tab"},
+		actionBack:              {"esc"},
+		actionUp:                {"up", "k"},
+		actionDown:              {"down", "j"},
+		actionTop:               {"home", "g"},
+		actionBottom:            {"end", "G"},
+		actionOpen:              {"enter"},
+		actionAttachments:       {"s"},
+		actionFoldersOverlay:    {"\\"},
+		actionReload:            {"r"},
+		actionAccount:           {"a"},
+		actionToggleRead:        {"m"},
+		actionToggleFlag:        {"f"},
+		actionDelete:            {"d"},
+		actionVisualRange:       {"v"},
+		actionNextThreadMessage: {"n"},
+		actionPrevThreadMessage: {"p"},
 	}
 }
 

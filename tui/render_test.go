@@ -143,6 +143,79 @@ func TestMessageDateStaysOnItsRow(t *testing.T) {
 	}
 }
 
+// TestMessageRowsExactWidthWithIndent pins that indentation comes out of the
+// subject budget instead of being added to the row: every depth stays exactly the
+// panel's inner width and keeps its date, and two cells of indent appear per level
+// up to the cap.
+func TestMessageRowsExactWidthWithIndent(t *testing.T) {
+	const rowWidth = 38
+
+	messages := []mail.Message{threadMessage(1, "subject", "<m1>", 30)}
+	for i := 2; i <= 6; i++ {
+		messages = append(messages, threadMessage(
+			imap.UID(i),
+			"subject",
+			fmt.Sprintf("<m%d>", i),
+			30,
+			fmt.Sprintf("<m%d>", i-1),
+		))
+	}
+
+	m := loaded(t, 105, 59, []mail.Folder{{Name: "INBOX", Delimiter: '/'}}, nil)
+	m.messages = messages
+	m.rows = BuildRows(messages)
+
+	if len(m.rows) != 6 {
+		t.Fatalf("rows = %d, want 6", len(m.rows))
+	}
+
+	base := strings.Index(m.messageLine(0, rowWidth), "subject")
+	if base < 0 {
+		t.Fatalf("the first row does not contain the subject")
+	}
+
+	for index, row := range m.rows {
+		line := m.messageLine(index, rowWidth)
+
+		if got := lipgloss.Width(line); got != rowWidth {
+			t.Errorf("row %d at depth %d is %d cells, want %d", index, row.Depth, got, rowWidth)
+		}
+		if got := lipgloss.Height(line); got != 1 {
+			t.Errorf("row %d at depth %d is %d lines, want 1", index, row.Depth, got)
+		}
+		if !strings.HasSuffix(strings.TrimRight(line, " "), "Oct 30") {
+			t.Errorf("row %d at depth %d does not end with the date: %q", index, row.Depth, line)
+		}
+
+		wantStart := base + (2 * row.Depth)
+		if got := strings.Index(line, "subject"); got != wantStart {
+			t.Errorf("row %d subject starts at %d, want %d for depth %d", index, got, wantStart, row.Depth)
+		}
+		if want := min(index, MaxThreadDepth); row.Depth != want {
+			t.Errorf("row %d depth = %d, want %d", index, row.Depth, want)
+		}
+	}
+}
+
+// TestFooterHintsReader proves the reader names the thread keys, and that they
+// survive the width the tablet actually has rather than being truncated away.
+func TestFooterHintsReader(t *testing.T) {
+	m := readerThreadModel(t)
+	m.width = 105
+	m.height = 59
+
+	footer := m.renderFooter()
+
+	for _, want := range []string{"n:next", "p:prev"} {
+		if !strings.Contains(footer, want) {
+			t.Errorf("reader footer missing %q: %q", want, footer)
+		}
+	}
+	if got, limit := lipgloss.Width(footer), ContentWidth(105); got > limit {
+		t.Errorf("footer is %d cells, want at most %d", got, limit)
+	}
+}
+
 // TestChromeGaps pins the bottom block: a blank line separates the panels from the
 // footer, and another separates the footer from the status bar.
 func TestChromeGaps(t *testing.T) {

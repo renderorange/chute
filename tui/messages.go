@@ -8,10 +8,19 @@ import (
 	"github.com/renderorange/chute/mail"
 )
 
-// sortNewestFirst orders messages by UID descending, so the newest is on top.
+// sortNewestFirst orders messages by date descending, so the newest is on top, and
+// falls back to UID descending for messages with the same date. UID alone is
+// arrival order, not chronology: a message moved into the folder gets a high UID
+// and would sort as the newest despite being old.
 func sortNewestFirst(messages []mail.Message) []mail.Message {
 	sort.Slice(messages, func(i, j int) bool {
-		return messages[i].UID > messages[j].UID
+		left, right := messages[i], messages[j]
+
+		if !left.Date().Equal(right.Date()) {
+			return left.Date().After(right.Date())
+		}
+
+		return left.UID > right.UID
 	})
 
 	return messages
@@ -39,11 +48,11 @@ func (m Model) messageRows() int {
 
 // moveMessageCursor moves the selection and keeps it inside the scroll window.
 func (m *Model) moveMessageCursor(delta int) {
-	if len(m.messages) == 0 {
+	if len(m.rows) == 0 {
 		return
 	}
 
-	m.messageCursor = clamp(m.messageCursor+delta, 0, len(m.messages)-1)
+	m.messageCursor = clamp(m.messageCursor+delta, 0, len(m.rows)-1)
 
 	rows := m.messageRows()
 	if m.messageCursor < m.messageScroll {
@@ -59,10 +68,10 @@ func (m *Model) moveMessageCursor(delta int) {
 // clampMessageScroll keeps the stored offset valid after a reload or resize.
 func (m *Model) clampMessageScroll() {
 	rows := m.messageRows()
-	maxScroll := max(0, len(m.messages)-rows)
+	maxScroll := max(0, len(m.rows)-rows)
 
 	m.messageScroll = clamp(m.messageScroll, 0, maxScroll)
-	m.messageCursor = clamp(m.messageCursor, 0, max(0, len(m.messages)-1))
+	m.messageCursor = clamp(m.messageCursor, 0, max(0, len(m.rows)-1))
 
 	if m.messageCursor < m.messageScroll {
 		m.messageScroll = m.messageCursor
@@ -83,12 +92,12 @@ func (m Model) messageLines(rows, width int) []string {
 		return []string{MutedStyle.Render("loading...")}
 	case m.openFolder == "":
 		return []string{MutedStyle.Render("open a folder with enter")}
-	case len(m.messages) == 0:
+	case len(m.rows) == 0:
 		return []string{MutedStyle.Render("no messages")}
 	}
 
-	start := clamp(m.messageScroll, 0, max(0, len(m.messages)-rows))
-	end := min(start+rows, len(m.messages))
+	start := clamp(m.messageScroll, 0, max(0, len(m.rows)-rows))
+	end := min(start+rows, len(m.rows))
 
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
@@ -103,7 +112,7 @@ const messageGap = 3
 
 // messageLine renders one message row: markers, sender, subject, gap, date.
 func (m Model) messageLine(index, width int) string {
-	msg := m.messages[index]
+	msg := m.rows[index].Message
 
 	// ASCII markers keep every row one cell wide, so the date never wraps.
 	unread := " "
@@ -120,13 +129,23 @@ func (m Model) messageLine(index, width int) string {
 
 	date := msg.Date().Local().Format("Jan 02")
 	fromWidth := clamp(width/4, 10, 20)
-	subjectWidth := width - fromWidth - len(date) - messageGap - 4
+
+	// Indentation comes out of the subject budget, never out of the row: two cells
+	// per depth, capped, and given up entirely if the row is too narrow to hold a
+	// subject afterwards.
+	indent := 2 * min(m.rows[index].Depth, MaxThreadDepth)
+	if limit := width - fromWidth - len(date) - messageGap - 4 - 4; indent > limit {
+		indent = max(0, limit)
+	}
+
+	subjectWidth := width - fromWidth - len(date) - messageGap - 4 - indent
 	if subjectWidth < 4 {
 		subjectWidth = 4
 	}
 
-	line := fmt.Sprintf("%s%s %s %s%s%s",
+	line := fmt.Sprintf("%s%s %s%s %s%s%s",
 		unread, flagged,
+		strings.Repeat(" ", indent),
 		padColumn(singleLine(msg.From()), fromWidth),
 		padColumn(singleLine(msg.Subject()), subjectWidth),
 		strings.Repeat(" ", messageGap),
@@ -148,9 +167,29 @@ func (m Model) messageLine(index, width int) string {
 
 // selectedMessage is the message under the cursor, if there is one.
 func (m Model) selectedMessage() (mail.Message, bool) {
-	if m.messageCursor < 0 || m.messageCursor >= len(m.messages) {
+	if m.messageCursor < 0 || m.messageCursor >= len(m.rows) {
 		return mail.Message{}, false
 	}
 
-	return m.messages[m.messageCursor], true
+	return m.rows[m.messageCursor].Message, true
+}
+
+// rebuildRows re-derives the list after messages changed and keeps the cursor on
+// the same message, identified by UID. Re-parenting and reordering must not
+// silently move the selection to a different conversation.
+func (m *Model) rebuildRows() {
+	keep, hasCursor := m.selectedMessage()
+
+	m.rows = BuildRows(m.messages)
+
+	if hasCursor {
+		for i, row := range m.rows {
+			if row.Message.UID == keep.UID {
+				m.messageCursor = i
+				break
+			}
+		}
+	}
+
+	m.clampMessageScroll()
 }
