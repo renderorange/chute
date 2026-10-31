@@ -18,6 +18,7 @@ var version = "dev"
 
 func main() {
 	configPath := flag.String("config", defaultConfigPath(), "path to the config file")
+	debugPath := flag.String("debug", "", "write the IMAP protocol log to this file, with the credential masked")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	check := flag.Bool("check", false, "connect to every account, list folders, then exit")
 	flag.Parse()
@@ -33,19 +34,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	mailOptions, closeLog, err := debugOptions(*debugPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chute: -debug: %v\n", err)
+		os.Exit(1)
+	}
+
 	if *check {
-		if !runCheck(cfg) {
+		ok := runCheck(cfg, mailOptions...)
+		closeLog()
+		if !ok {
 			os.Exit(1)
 		}
 
 		return
 	}
 
-	model := tui.New(cfg, version)
+	model := tui.New(cfg, version, mailOptions...)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, runErr := program.Run()
 	closeErr := model.Close()
+	closeLog()
 
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, runErr)
@@ -56,9 +66,38 @@ func main() {
 	}
 }
 
+// debugOptions opens the protocol log when -debug was given. It returns the mail
+// options that send every account's stream there, and a function that closes the
+// file; repeated calls are safe and a missing path is a no-op.
+//
+// The file is truncated and created 0600: it is evidence for one run, it carries the
+// session's mail traffic, and an earlier run's MOVE lines must not be read as this
+// run's. An existing file keeps its own permissions.
+func debugOptions(path string) ([]mail.Option, func(), error) {
+	if path == "" {
+		return nil, func() {}, nil
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	closed := false
+	closeLog := func() {
+		if closed {
+			return
+		}
+		closed = true
+		file.Close()
+	}
+
+	return []mail.Option{mail.WithDebugWriter(file)}, closeLog, nil
+}
+
 // runCheck verifies every account can connect and list folders. It prints the
 // credential source but never the credential itself. It reports success.
-func runCheck(cfg *config.Config) bool {
+func runCheck(cfg *config.Config, mailOptions ...mail.Option) bool {
 	ok := true
 
 	for i := range cfg.Accounts {
@@ -75,7 +114,7 @@ func runCheck(cfg *config.Config) bool {
 			continue
 		}
 
-		client, err := mail.Connect(*acct, password)
+		client, err := mail.Connect(*acct, password, mailOptions...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", acct.Name, err)
 			ok = false
