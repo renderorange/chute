@@ -98,6 +98,51 @@ func TestFolderPathHelpers(t *testing.T) {
 	}
 }
 
+// TestResolveFolder pins the Trash resolution order: the configured override
+// wins, then the special-use attribute, and nothing is guessed when neither
+// matches. A wrong guess moves mail into an arbitrary mailbox.
+func TestResolveFolder(t *testing.T) {
+	trashAttr := []imap.MailboxAttr{imap.MailboxAttrTrash}
+	populated := []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "INBOX/Deleted", Delimiter: '/'},
+		{Name: "Bin", Delimiter: '/', Attrs: trashAttr},
+	}
+	empty := []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Archive", Delimiter: '/'},
+	}
+
+	tests := []struct {
+		name     string
+		folders  []Folder
+		role     Role
+		override string
+		want     string
+		wantOK   bool
+	}{
+		{name: "special use attribute", folders: populated, role: RoleTrash, want: "Bin", wantOK: true},
+		{name: "override wins over attribute", folders: populated, role: RoleTrash, override: "INBOX/Deleted", want: "INBOX/Deleted", wantOK: true},
+		{name: "override ignores case", folders: populated, role: RoleTrash, override: "inbox/deleted", want: "INBOX/Deleted", wantOK: true},
+		{name: "unknown override falls back to attribute", folders: populated, role: RoleTrash, override: "Missing", want: "Bin", wantOK: true},
+		{name: "inbox resolves by name", folders: populated, role: RoleInbox, want: "INBOX", wantOK: true},
+		{name: "no trash advertised", folders: empty, role: RoleTrash, wantOK: false},
+		{name: "no role requested", folders: populated, role: RoleNone, wantOK: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ResolveFolder(tc.folders, tc.role, tc.override)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v (folder %q)", ok, tc.wantOK, got.Name)
+			}
+			if got.Name != tc.want {
+				t.Errorf("folder = %q, want %q", got.Name, tc.want)
+			}
+		})
+	}
+}
+
 func TestFilterFolders(t *testing.T) {
 	folders := []Folder{
 		{Name: "INBOX", Delimiter: '/'},

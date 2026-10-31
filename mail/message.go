@@ -17,6 +17,26 @@ type Message struct {
 	Envelope     imap.Envelope
 }
 
+// SetFlag adds or removes a flag locally. It mirrors what the server confirmed,
+// so the view can update without refetching the folder.
+func (m *Message) SetFlag(flag imap.Flag, on bool) {
+	for i, have := range m.Flags {
+		if have != flag {
+			continue
+		}
+		if on {
+			return
+		}
+		m.Flags = append(m.Flags[:i], m.Flags[i+1:]...)
+
+		return
+	}
+
+	if on {
+		m.Flags = append(m.Flags, flag)
+	}
+}
+
 // HasFlag reports whether the message carries a flag.
 func (m Message) HasFlag(flag imap.Flag) bool {
 	for _, have := range m.Flags {

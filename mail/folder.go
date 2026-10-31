@@ -101,6 +101,33 @@ func (f Folder) Leaf() string {
 	return f.Name[idx+1:]
 }
 
+// ResolveFolder finds the mailbox that serves a role. The configured override
+// wins when it names a real mailbox, then the server's special-use attribute.
+// Nothing is guessed from a folder's name: a wrong guess would move mail into an
+// arbitrary mailbox, so a role with no match reports not found.
+func ResolveFolder(folders []Folder, role Role, override string) (Folder, bool) {
+	if role == RoleNone {
+		return Folder{}, false
+	}
+
+	override = strings.TrimSpace(override)
+	if override != "" {
+		for _, folder := range folders {
+			if strings.EqualFold(folder.Name, override) {
+				return folder, true
+			}
+		}
+	}
+
+	for _, folder := range folders {
+		if folder.Role() == role {
+			return folder, true
+		}
+	}
+
+	return Folder{}, false
+}
+
 // FilterFolders removes configured mailbox names and their subfolders.
 // Matching is case-insensitive.
 func FilterFolders(folders []Folder, hide []string) []Folder {
