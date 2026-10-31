@@ -8,6 +8,7 @@ type action int
 const (
 	actionNone action = iota
 	actionQuit
+	actionForceQuit
 	actionNextPanel
 	actionBack
 	actionUp
@@ -29,10 +30,12 @@ const (
 type bindings map[action][]string
 
 // defaultBindings is the shipped key layout. Modal pickers reuse the same
-// intents: actionOpen confirms, actionBack cancels.
+// intents: actionOpen confirms, actionBack cancels. actionQuit leaves the app
+// from the main view but only closes a modal; actionForceQuit always leaves.
 func defaultBindings() bindings {
 	return bindings{
-		actionQuit:           {"q", "ctrl+c"},
+		actionQuit:           {"q"},
+		actionForceQuit:      {"ctrl+c"},
 		actionNextPanel:      {"tab"},
 		actionBack:           {"esc"},
 		actionUp:             {"up", "k"},

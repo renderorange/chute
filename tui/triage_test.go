@@ -539,6 +539,128 @@ func TestTriageKeysIgnoreOtherPanels(t *testing.T) {
 	}
 }
 
+// TestQuitClosesModalInsteadOfExiting proves q keeps its old modal meaning: it
+// closes the picker rather than killing the program.
+func TestQuitClosesModalInsteadOfExiting(t *testing.T) {
+	m, remove := withDelete(t, sampleMessages(2))
+
+	next, _ := m.Update(keyMsg("d"))
+	m = next.(Model)
+
+	next, cmd := m.Update(keyMsg("q"))
+	m = next.(Model)
+
+	if cmd != nil {
+		t.Error("q in a modal returned a command")
+	}
+	if m.confirmOpen {
+		t.Error("q did not close the confirmation")
+	}
+	if remove.calls != 0 {
+		t.Error("q in the confirmation still deleted")
+	}
+}
+
+// TestForceQuitLeavesFromModal proves ctrl+c still exits from a modal.
+func TestForceQuitLeavesFromModal(t *testing.T) {
+	m, _ := withDelete(t, sampleMessages(1))
+
+	next, _ := m.Update(keyMsg("d"))
+	m = next.(Model)
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_ = next
+
+	if cmd == nil {
+		t.Fatal("ctrl+c in a modal returned no command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("ctrl+c in a modal did not quit the program")
+	}
+}
+
+// TestOpeningMessageClearsVisualRange proves enter ends the selection, so the
+// first esc afterwards leaves the reader instead of clearing an invisible range.
+func TestOpeningMessageClearsVisualRange(t *testing.T) {
+	m, _ := withTriage(t, sampleMessages(3))
+	m.loadBody = fakeBody(sampleBody(), nil)
+
+	next, _ := m.Update(keyMsg("v"))
+	m = next.(Model)
+	next, _ = m.Update(keyMsg("j"))
+	m = next.(Model)
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = deliver(t, m, cmd)
+
+	if m.visualActive() {
+		t.Error("the range survived opening a message")
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if m.focus != focusMessages {
+		t.Errorf("focus = %v, want messages after one esc from the reader", m.focus)
+	}
+}
+
+// TestBodyFailureClearsPendingSeen proves a failed load leaves no stale
+// mark-on-open intent behind.
+func TestBodyFailureClearsPendingSeen(t *testing.T) {
+	m := openInbox(t, withInbox(t, sampleMessages(1), nil))
+	m.loadBody = fakeBody(nil, errors.New("fetch failed"))
+	m.storeFlags = (&fakeStore{}).load
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = deliver(t, m, cmd)
+
+	if m.markSeenOnLoad != (bodyKey{}) {
+		t.Error("a failed body load left a pending mark-on-open")
+	}
+	if !strings.Contains(m.status, "fetch failed") {
+		t.Errorf("status = %q, want the load error", m.status)
+	}
+}
+
+// TestImplicitMarkSeenFailureIsQuiet proves a read-only folder does not report an
+// error every time a message is opened.
+func TestImplicitMarkSeenFailureIsQuiet(t *testing.T) {
+	store := &fakeStore{err: errors.New("mailbox is read-only")}
+	m := openInbox(t, withInbox(t, sampleMessages(1), nil))
+	m.loadBody = fakeBody(sampleBody(), nil)
+	m.storeFlags = store.load
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	next, markCmd := m.Update(cmd())
+	m = next.(Model)
+	m = deliver(t, m, markCmd)
+
+	if store.calls != 1 {
+		t.Fatalf("store calls = %d, want 1", store.calls)
+	}
+	if strings.Contains(m.status, "read-only") {
+		t.Errorf("status = %q, want an implicit failure kept quiet", m.status)
+	}
+}
+
+// TestExplicitFlagFailureIsNotQuiet proves a flag change the user asked for does
+// report its error.
+func TestExplicitFlagFailureIsNotQuiet(t *testing.T) {
+	m, store := withTriage(t, sampleMessages(1))
+	store.err = errors.New("mailbox is read-only")
+
+	next, cmd := m.Update(keyMsg("m"))
+	m = next.(Model)
+	m = deliver(t, m, cmd)
+
+	if !strings.Contains(m.status, "read-only") {
+		t.Errorf("status = %q, want the error from an explicit flag change", m.status)
+	}
+}
+
 // TestTriageKeysAreInertWithoutMessages proves a keypress on an empty folder
 // reports rather than calling the server.
 func TestTriageKeysAreInertWithoutMessages(t *testing.T) {

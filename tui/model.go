@@ -246,6 +246,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
+			if m.markSeenOnLoad == key {
+				m.markSeenOnLoad = bodyKey{}
+			}
 			m.status = msg.err.Error()
 			return m, nil
 		}
@@ -281,7 +284,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.status = msg.err.Error()
+			if !msg.quiet {
+				m.status = msg.err.Error()
+			}
 			return m, nil
 		}
 
@@ -326,7 +331,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.keys.resolve(msg.String()) {
-	case actionQuit:
+	case actionQuit, actionForceQuit:
 		return m, tea.Quit
 
 	case actionNextPanel:
@@ -486,6 +491,7 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 
 	key := bodyKey{account: m.accountName(), folder: m.openFolder, uid: msg.UID}
 	m.focus = focusReader
+	m.visualAnchor = noVisualAnchor
 
 	if _, cached := m.bodyFor(key); cached {
 		return m, m.markSeenCmd(msg.UID, msg.Seen())
@@ -501,7 +507,9 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	// The body load returns first; the \Seen command follows in bodyMsg. Both
 	// cannot be batched here because a batch resolves to one BatchMsg, which
 	// makes the follow-up untestable and hides which command failed.
-	if !msg.Seen() {
+	if msg.Seen() {
+		m.markSeenOnLoad = bodyKey{}
+	} else {
 		m.markSeenOnLoad = key
 	}
 
@@ -654,6 +662,8 @@ func (m Model) renderFooter() string {
 	hints := "q:quit  j/k:move  enter:open  esc:back  \\:folders  m:read  f:flag  d:delete  v:range  s:attach  r:reload"
 
 	switch {
+	case m.confirmOpen:
+		hints = "enter:delete  esc:cancel"
 	case m.attachOpen:
 		hints = "j/k:choose  enter:save  esc:close"
 	case m.foldersOpen:

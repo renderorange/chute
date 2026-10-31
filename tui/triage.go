@@ -84,7 +84,7 @@ func (m Model) toggleRead() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m.storeFlagsCmd(uids, !m.allSeen(uids), imap.FlagSeen)
+	return m.storeFlagsCmd(uids, !m.allSeen(uids), false, imap.FlagSeen)
 }
 
 // toggleFlag flips \Flagged on the selection, using the same mixed-selection
@@ -100,7 +100,7 @@ func (m Model) toggleFlag() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m.storeFlagsCmd(uids, !m.allFlagged(uids), imap.FlagFlagged)
+	return m.storeFlagsCmd(uids, !m.allFlagged(uids), false, imap.FlagFlagged)
 }
 
 // allSeen reports whether every listed message is already read.
@@ -134,8 +134,9 @@ func (m Model) allHave(uids []imap.UID, have func(mail.Message) bool) bool {
 	return len(checked) == len(wanted)
 }
 
-// storeFlagsCmd sends one flag change for the whole selection.
-func (m Model) storeFlagsCmd(uids []imap.UID, add bool, flag imap.Flag) (tea.Model, tea.Cmd) {
+// storeFlagsCmd sends one flag change for the whole selection. quiet suppresses
+// the error in the status bar, for changes the user did not ask for directly.
+func (m Model) storeFlagsCmd(uids []imap.UID, add bool, quiet bool, flag imap.Flag) (tea.Model, tea.Cmd) {
 	if m.storeFlags == nil || m.openFolder == "" || len(m.cfg.Accounts) == 0 {
 		return m, nil
 	}
@@ -154,19 +155,22 @@ func (m Model) storeFlagsCmd(uids []imap.UID, add bool, flag imap.Flag) (tea.Mod
 			uids:    uids,
 			add:     add,
 			flags:   []imap.Flag{flag},
+			quiet:   quiet,
 			err:     err,
 		}
 	}
 }
 
 // markSeenCmd marks one opened message read. Fetching a body never sets \Seen;
-// opening the message deliberately does.
+// opening the message deliberately does. A failure is quiet: the user did not
+// ask for this, and a read-only folder would otherwise report an error on every
+// open.
 func (m Model) markSeenCmd(uid imap.UID, alreadySeen bool) tea.Cmd {
 	if alreadySeen {
 		return nil
 	}
 
-	_, cmd := m.storeFlagsCmd([]imap.UID{uid}, true, imap.FlagSeen)
+	_, cmd := m.storeFlagsCmd([]imap.UID{uid}, true, true, imap.FlagSeen)
 
 	return cmd
 }

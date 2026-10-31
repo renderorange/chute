@@ -43,10 +43,10 @@ func (m Model) handleAttachKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.keys.resolve(msg.String()) {
-	case actionQuit:
+	case actionForceQuit:
 		return m, tea.Quit
 
-	case actionBack:
+	case actionQuit, actionBack:
 		m.attachOpen = false
 
 	case actionUp:

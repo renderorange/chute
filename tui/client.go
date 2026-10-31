@@ -85,13 +85,14 @@ type bodyMsg struct {
 }
 
 // flagsMsg carries the result of one flag change, so the model can update the
-// rows the server confirmed.
+// rows the server confirmed. quiet marks a change the user did not ask for.
 type flagsMsg struct {
 	account string
 	folder  string
 	uids    []imap.UID
 	add     bool
 	flags   []imap.Flag
+	quiet   bool
 	err     error
 }
 

@@ -31,10 +31,10 @@ func (m Model) openFolders() (tea.Model, tea.Cmd) {
 // handleFoldersKey applies a keypress while the folder picker is open.
 func (m Model) handleFoldersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.keys.resolve(msg.String()) {
-	case actionQuit:
+	case actionForceQuit:
 		return m, tea.Quit
 
-	case actionBack, actionFoldersOverlay:
+	case actionQuit, actionBack, actionFoldersOverlay:
 		m.foldersOpen = false
 
 	case actionUp:

@@ -392,6 +392,35 @@ func TestDeleteMessagesRefusesWithoutCapabilities(t *testing.T) {
 	}
 }
 
+// TestDeleteMessagesRefusesTrashEqualToSource guards the fallback's data-loss
+// path: copying a mailbox onto itself and then expunging the source UIDs would
+// destroy the messages outright.
+func TestDeleteMessagesRefusesTrashEqualToSource(t *testing.T) {
+	server := newTestServer(t, imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapUIDPlus: {}})
+	client := server.connect(t)
+	uid := server.appendMessage(t, "INBOX", "must survive")
+
+	if err := client.DeleteMessages("INBOX", "inbox", []imap.UID{uid}); err == nil {
+		t.Fatal("DeleteMessages accepted the source folder as its trash folder")
+	}
+
+	if uids := uidList(t, client, "INBOX"); len(uids) != 1 || uids[0] != uid {
+		t.Errorf("INBOX holds %v, want the message untouched", uids)
+	}
+}
+
+// TestMoveMessagesRefusesSameFolder proves a pointless move is reported instead of
+// being sent to the server.
+func TestMoveMessagesRefusesSameFolder(t *testing.T) {
+	server := newTestServer(t, testCaps())
+	client := server.connect(t)
+	server.appendMessage(t, "INBOX", "stay put")
+
+	if err := client.MoveMessages("INBOX", "INBOX", []imap.UID{1}); err == nil {
+		t.Fatal("MoveMessages accepted the source folder as its destination")
+	}
+}
+
 // TestDeleteMessagesEmptySelectionIsNoOp proves a keypress with nothing selected
 // cannot reach the server.
 func TestDeleteMessagesEmptySelectionIsNoOp(t *testing.T) {

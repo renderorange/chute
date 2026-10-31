@@ -38,10 +38,10 @@ func (m Model) beginDelete() (tea.Model, tea.Cmd) {
 // handleConfirmKey applies a keypress while the delete confirmation is open.
 func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.keys.resolve(msg.String()) {
-	case actionQuit:
+	case actionForceQuit:
 		return m, tea.Quit
 
-	case actionBack:
+	case actionQuit, actionBack:
 		m.confirmOpen = false
 		m.pendingDelete = nil
 		m.status = "delete cancelled"

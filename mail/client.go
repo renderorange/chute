@@ -170,6 +170,9 @@ func (c *Client) MoveMessages(folder, dest string, uids []imap.UID) error {
 	if dest == "" {
 		return fmt.Errorf("mail: account %q: moving from %q needs a destination folder", c.account, folder)
 	}
+	if strings.EqualFold(dest, folder) {
+		return fmt.Errorf("mail: account %q: moving %q messages to %q would be a no-op", c.account, folder, dest)
+	}
 
 	if _, err := c.conn.Select(folder, nil).Wait(); err != nil {
 		return fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
@@ -192,6 +195,13 @@ func (c *Client) DeleteMessages(folder, trash string, uids []imap.UID) error {
 	}
 	if trash == "" {
 		return fmt.Errorf("mail: account %q: deleting from %q needs a trash mailbox", c.account, folder)
+	}
+	// The fallback copies to dest and then expunges the source UIDs, so a trash
+	// folder equal to the source would copy every message onto itself and then
+	// delete it for good. Refusing here protects against that even if a caller
+	// skips the session's own guard.
+	if strings.EqualFold(trash, folder) {
+		return fmt.Errorf("mail: account %q: %q is the trash folder; refusing to delete it into itself", c.account, folder)
 	}
 
 	switch {
