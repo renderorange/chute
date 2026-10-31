@@ -94,8 +94,7 @@ func (m *Model) removeDeleted(uids []imap.UID) {
 		}
 	}
 	m.messages = kept
-	m.messageCursor = clamp(m.messageCursor, 0, max(0, len(m.messages)-1))
-	m.clampMessageScroll()
+	m.rebuildRows()
 	m.visualAnchor = noVisualAnchor
 }
 

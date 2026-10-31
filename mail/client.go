@@ -256,6 +256,8 @@ func messagesFromBuffers(buffers []*imapclient.FetchMessageBuffer) []Message {
 		}
 		if buf.Envelope != nil {
 			msg.Envelope = *buf.Envelope
+			msg.MessageID = buf.Envelope.MessageID
+			msg.InReplyTo = buf.Envelope.InReplyTo
 		}
 
 		messages = append(messages, msg)

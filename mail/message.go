@@ -15,6 +15,12 @@ type Message struct {
 	Size         int64
 	InternalDate time.Time
 	Envelope     imap.Envelope
+
+	// MessageID and InReplyTo come from the envelope and are what threading
+	// reads: a message attaches to the last In-Reply-To entry present in its
+	// folder. Both are empty for a thread root.
+	MessageID string
+	InReplyTo []string
 }
 
 // SetFlag adds or removes a flag locally. It mirrors what the server confirmed,

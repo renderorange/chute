@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
 )
@@ -320,10 +322,191 @@ func TestStartFolderOpensOnlyOnce(t *testing.T) {
 	// A later folder load, as after a reload, must not reopen the start folder.
 	m.openFolder = ""
 	m.messages = nil
+	m.rows = nil
 	next, cmd = m.Update(foldersMsg{account: "fastmail", folders: []mail.Folder{{Name: "INBOX", Delimiter: '/'}}})
 	m = next.(Model)
 
 	if cmd != nil {
 		t.Error("a later folder load reopened the start folder")
+	}
+}
+
+// readerThreadModel loads a three-message conversation with the cursor on its
+// first row and the reader focused.
+func readerThreadModel(t *testing.T) Model {
+	t.Helper()
+
+	parent := threadMessage(1, "parent subject", "<p>", 1)
+	reply := threadMessage(2, "reply subject", "<r>", 2, "<p>")
+	reply2 := threadMessage(3, "reply two subject", "<r2>", 3, "<r>")
+
+	m := openInbox(t, withInbox(t, []mail.Message{parent, reply, reply2}, nil))
+	m.focus = focusReader
+	m.messageCursor = 0
+
+	return m
+}
+
+func TestNextThreadMessage(t *testing.T) {
+	m := readerThreadModel(t)
+
+	for want := 1; want <= 2; want++ {
+		next, _ := m.Update(keyMsg("n"))
+		m = next.(Model)
+
+		if got := m.messageCursor; got != want {
+			t.Fatalf("after n, cursor = %d, want %d", got, want)
+		}
+		if m.focus != focusReader {
+			t.Fatalf("n left the reader for focus %v", m.focus)
+		}
+	}
+
+	// The last message of the thread has no next message.
+	next, cmd := m.Update(keyMsg("n"))
+	m = next.(Model)
+
+	if got := m.messageCursor; got != 2 {
+		t.Errorf("n past the last message moved the cursor to %d, want 2", got)
+	}
+	if cmd != nil {
+		t.Error("n past the last message returned a command")
+	}
+}
+
+func TestPrevThreadMessage(t *testing.T) {
+	m := readerThreadModel(t)
+	m.messageCursor = 2
+
+	for want := 1; want >= 0; want-- {
+		next, _ := m.Update(keyMsg("p"))
+		m = next.(Model)
+
+		if got := m.messageCursor; got != want {
+			t.Fatalf("after p, cursor = %d, want %d", got, want)
+		}
+	}
+
+	next, _ := m.Update(keyMsg("p"))
+	if got := next.(Model).messageCursor; got != 0 {
+		t.Errorf("p before the first message moved the cursor to %d, want 0", got)
+	}
+}
+
+// TestThreadNavigationStaysInsideThread proves n stops at the end of a
+// conversation instead of walking into the next one in the list.
+func TestThreadNavigationStaysInsideThread(t *testing.T) {
+	aParent := threadMessage(1, "a parent", "<a1>", 4)
+	aReply := threadMessage(2, "a reply", "<a2>", 5, "<a1>")
+	bParent := threadMessage(3, "b parent", "<b1>", 1)
+
+	m := openInbox(t, withInbox(t, []mail.Message{aParent, aReply, bParent}, nil))
+	m.focus = focusReader
+	m.messageCursor = 1
+
+	next, _ := m.Update(keyMsg("n"))
+	if got := next.(Model).messageCursor; got != 1 {
+		t.Errorf("n walked from the last reply into the next conversation: cursor = %d, want 1", got)
+	}
+
+	next, _ = m.Update(keyMsg("p"))
+	if got := next.(Model).messageCursor; got != 0 {
+		t.Errorf("p from the last reply = %d, want the parent at 0", got)
+	}
+}
+
+// TestThreadKeysInertOnMessageList proves n and p only act inside the reader.
+func TestThreadKeysInertOnMessageList(t *testing.T) {
+	m := readerThreadModel(t)
+	m.focus = focusMessages
+
+	next, _ := m.Update(keyMsg("n"))
+
+	if got := next.(Model).messageCursor; got != 0 {
+		t.Errorf("n moved the list cursor to %d while the list had focus", got)
+	}
+}
+
+// TestReaderEscLandsOnExpandedMessage proves backing out of the reader leaves the
+// list cursor on the message that was last read.
+func TestReaderEscLandsOnExpandedMessage(t *testing.T) {
+	m := readerThreadModel(t)
+
+	next, _ := m.Update(keyMsg("n"))
+	m = next.(Model)
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+
+	if m.focus != focusMessages {
+		t.Errorf("focus after esc = %v, want messages", m.focus)
+	}
+	if got := m.messageCursor; got != 1 {
+		t.Errorf("cursor after esc = %d, want the message just read at 1", got)
+	}
+}
+
+// TestTwoPendingMarkSeenIntents proves two in-flight body loads each queue their
+// own mark-as-read, so walking a thread cannot lose one. The intent used to be a
+// single slot.
+func TestTwoPendingMarkSeenIntents(t *testing.T) {
+	m := openInbox(t, withInbox(t, sampleMessages(2), nil))
+
+	var stored []imap.UID
+	m.storeFlags = func(_ config.Account, _ string, uids []imap.UID, _ bool, _ ...imap.Flag) error {
+		stored = append(stored, uids...)
+
+		return nil
+	}
+
+	first := bodyKey{account: m.accountName(), folder: "INBOX", uid: 1}
+	second := bodyKey{account: m.accountName(), folder: "INBOX", uid: 2}
+	m.markSeenOnLoad = map[bodyKey]bool{first: true, second: true}
+
+	for _, uid := range []imap.UID{1, 2} {
+		next, cmd := m.Update(bodyMsg{
+			account: m.accountName(),
+			folder:  "INBOX",
+			uid:     uid,
+			body:    &mail.Body{Text: "text"},
+		})
+		m = next.(Model)
+
+		if cmd == nil {
+			t.Fatalf("body for UID %d returned no mark-seen command", uid)
+		}
+		cmd()
+	}
+
+	if len(stored) != 2 || stored[0] != 1 || stored[1] != 2 {
+		t.Errorf("marked %v read, want [1 2]", stored)
+	}
+	if len(m.markSeenOnLoad) != 0 {
+		t.Errorf("mark intents left over: %v", m.markSeenOnLoad)
+	}
+}
+
+// TestFailedBodyClearsOnlyItsOwnIntent proves one message's failed body load does
+// not clear another message's pending mark.
+func TestFailedBodyClearsOnlyItsOwnIntent(t *testing.T) {
+	m := openInbox(t, withInbox(t, sampleMessages(2), nil))
+
+	first := bodyKey{account: m.accountName(), folder: "INBOX", uid: 1}
+	second := bodyKey{account: m.accountName(), folder: "INBOX", uid: 2}
+	m.markSeenOnLoad = map[bodyKey]bool{first: true, second: true}
+
+	next, _ := m.Update(bodyMsg{
+		account: m.accountName(),
+		folder:  "INBOX",
+		uid:     1,
+		err:     errors.New("boom"),
+	})
+	m = next.(Model)
+
+	if m.markSeenOnLoad[first] {
+		t.Error("the failed message kept its mark intent")
+	}
+	if !m.markSeenOnLoad[second] {
+		t.Error("a failed body load cleared another message's mark intent")
 	}
 }

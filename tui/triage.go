@@ -21,7 +21,7 @@ func (m *Model) toggleVisual() {
 		m.visualAnchor = noVisualAnchor
 		return
 	}
-	if m.focus != focusMessages || len(m.messages) == 0 {
+	if m.focus != focusMessages || len(m.rows) == 0 {
 		return
 	}
 
@@ -37,7 +37,7 @@ func (m Model) visualBounds() (int, int) {
 		start, end = end, start
 	}
 
-	return clamp(start, 0, len(m.messages)-1), clamp(end, 0, len(m.messages)-1)
+	return clamp(start, 0, len(m.rows)-1), clamp(end, 0, len(m.rows)-1)
 }
 
 // inVisual reports whether a row falls inside the active range.
@@ -54,7 +54,7 @@ func (m Model) inVisual(index int) bool {
 // actionUIDs is the set every triage action applies to: the whole range when one
 // is active, otherwise the message under the cursor.
 func (m Model) actionUIDs() []imap.UID {
-	if len(m.messages) == 0 {
+	if len(m.rows) == 0 {
 		return nil
 	}
 
@@ -65,7 +65,7 @@ func (m Model) actionUIDs() []imap.UID {
 
 	uids := make([]imap.UID, 0, end-start+1)
 	for i := start; i <= end; i++ {
-		uids = append(uids, m.messages[i].UID)
+		uids = append(uids, m.rows[i].Message.UID)
 	}
 
 	return uids
@@ -121,7 +121,8 @@ func (m Model) allHave(uids []imap.UID, have func(mail.Message) bool) bool {
 	}
 
 	checked := make(map[imap.UID]bool, len(uids))
-	for _, msg := range m.messages {
+	for _, row := range m.rows {
+		msg := row.Message
 		if !wanted[msg.UID] {
 			continue
 		}
@@ -191,4 +192,8 @@ func (m *Model) applyFlags(uids []imap.UID, flags []imap.Flag, on bool) {
 			m.messages[i].SetFlag(flag, on)
 		}
 	}
+
+	// Rows carry a copy of each message, so re-derive them or the list would keep
+	// showing the old flag state.
+	m.rebuildRows()
 }

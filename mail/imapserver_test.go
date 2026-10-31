@@ -183,6 +183,88 @@ func (s *testServer) appendMessage(t *testing.T, mailbox, subject string) imap.U
 	return data.UID
 }
 
+// appendThreadedMessage appends a message carrying the two headers threading
+// reads. An empty inReplyTo means the message is a thread root.
+func (s *testServer) appendThreadedMessage(t *testing.T, mailbox, subject, messageID, inReplyTo string) imap.UID {
+	t.Helper()
+
+	raw := "From: sender@example.com\r\n" +
+		"To: tester@example.com\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"Message-ID: " + messageID + "\r\n"
+	if inReplyTo != "" {
+		raw += "In-Reply-To: " + inReplyTo + "\r\n"
+	}
+	raw += "Date: Mon, 02 Jan 2006 15:04:05 -0700\r\n" +
+		"\r\n" +
+		"body\r\n"
+
+	data, err := s.user.Append(mailbox, strings.NewReader(raw), &imap.AppendOptions{})
+	if err != nil {
+		t.Fatalf("append to %s: %v", mailbox, err)
+	}
+
+	return data.UID
+}
+
+// countClientCommands counts the tagged commands carrying verb in the protocol
+// log. Untagged server responses start with "*" or "+", so this counts what the
+// client sent. It exists so a later change cannot add a second FETCH to a folder
+// open without a test failing.
+func countClientCommands(log *syncBuffer, verb string) int {
+	count := 0
+
+	for _, line := range strings.Split(log.String(), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] == "*" || fields[0] == "+" {
+			continue
+		}
+		if fields[1] == verb {
+			count++
+		}
+	}
+
+	return count
+}
+
+// TestFetchEnvelopesCarriesThreadingHeaders proves the real client returns
+// Message-ID and In-Reply-To from the server's ENVELOPE, in one FETCH.
+func TestFetchEnvelopesCarriesThreadingHeaders(t *testing.T) {
+	server := newTestServer(t, testCaps())
+	client := server.connect(t)
+
+	server.appendThreadedMessage(t, "INBOX", "parent", "<parent@example.org>", "")
+	server.appendThreadedMessage(t, "INBOX", "reply", "<reply@example.org>", "<parent@example.org>")
+
+	messages, err := client.FetchEnvelopes("INBOX")
+	if err != nil {
+		t.Fatalf("FetchEnvelopes: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(messages))
+	}
+
+	var reply *Message
+	for i := range messages {
+		if messages[i].Subject() == "reply" {
+			reply = &messages[i]
+		}
+	}
+	if reply == nil {
+		t.Fatal("the reply was not fetched")
+	}
+	if !strings.Contains(reply.MessageID, "reply@example.org") {
+		t.Errorf("MessageID = %q, want the reply id", reply.MessageID)
+	}
+	if len(reply.InReplyTo) != 1 || !strings.Contains(reply.InReplyTo[0], "parent@example.org") {
+		t.Errorf("InReplyTo = %v, want the parent id", reply.InReplyTo)
+	}
+
+	if got := countClientCommands(server.log, "FETCH"); got != 1 {
+		t.Errorf("client sent %d FETCH commands for one folder open, want 1", got)
+	}
+}
+
 // TestStoreFlagsAgainstInProcessServer proves a real STORE changes exactly the
 // listed UIDs, in both directions, through the real client.
 func TestStoreFlagsAgainstInProcessServer(t *testing.T) {

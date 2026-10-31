@@ -616,7 +616,7 @@ func TestBodyFailureClearsPendingSeen(t *testing.T) {
 	m = next.(Model)
 	m = deliver(t, m, cmd)
 
-	if m.markSeenOnLoad != (bodyKey{}) {
+	if len(m.markSeenOnLoad) != 0 {
 		t.Error("a failed body load left a pending mark-on-open")
 	}
 	if !strings.Contains(m.status, "fetch failed") {

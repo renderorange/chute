@@ -49,6 +49,7 @@ type Model struct {
 
 	openFolder    string
 	messages      []mail.Message
+	rows          []Row
 	messageCursor int
 	messageScroll int
 	msgLoading    bool
@@ -58,7 +59,7 @@ type Model struct {
 	readerScroll int
 
 	visualAnchor   int
-	markSeenOnLoad bodyKey
+	markSeenOnLoad map[bodyKey]bool
 
 	attachOpen   bool
 	attachCursor int
@@ -94,6 +95,7 @@ func New(cfg *config.Config, version string) Model {
 		storeFlags:     load.storeFlags,
 		deleteMessages: load.deleteMessages,
 		bodies:         make(map[bodyKey]*mail.Body),
+		markSeenOnLoad: make(map[bodyKey]bool),
 		visualAnchor:   noVisualAnchor,
 		keys:           defaultBindings(),
 	}
@@ -223,11 +225,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = msg.err.Error()
 			m.messages = nil
+			m.rows = nil
 
 			return m, nil
 		}
 
 		m.messages = sortNewestFirst(msg.messages)
+		m.rows = BuildRows(m.messages)
 		m.messageCursor = 0
 		m.messageScroll = 0
 		m.visualAnchor = noVisualAnchor
@@ -246,8 +250,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			if m.markSeenOnLoad == key {
-				m.markSeenOnLoad = bodyKey{}
+			if m.markSeenOnLoad != nil {
+				delete(m.markSeenOnLoad, key)
 			}
 			m.status = msg.err.Error()
 			return m, nil
@@ -261,8 +265,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Opening a message marks it read. The command is a separate STORE, so
 		// fetching a body still never changes a flag.
-		if m.markSeenOnLoad == key {
-			m.markSeenOnLoad = bodyKey{}
+		if m.markSeenOnLoad[key] {
+			delete(m.markSeenOnLoad, key)
 
 			return m, m.markSeenCmd(msg.uid, false)
 		}
@@ -357,9 +361,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = stateConnecting
 		m.status = ""
 		m.messages = nil
+		m.rows = nil
 		m.openFolder = ""
 		m.msgLoading = false
 		m.bodies = make(map[bodyKey]*mail.Body)
+		m.markSeenOnLoad = make(map[bodyKey]bool)
 		m.loadingBody = bodyKey{}
 		m.readerScroll = 0
 		m.visualAnchor = noVisualAnchor
@@ -395,6 +401,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionVisualRange:
 		m.toggleVisual()
+
+	case actionNextThreadMessage:
+		if m.focus == focusReader {
+			return m.moveThreadSelection(1)
+		}
+
+	case actionPrevThreadMessage:
+		if m.focus == focusReader {
+			return m.moveThreadSelection(-1)
+		}
 
 	case actionUp:
 		switch m.focus {
@@ -441,8 +457,8 @@ func (m *Model) jumpToEnd() {
 		m.folderCursor = len(m.folders) - 1
 		m.clampFolderScroll()
 	}
-	if m.focus == focusMessages && len(m.messages) > 0 {
-		m.messageCursor = len(m.messages) - 1
+	if m.focus == focusMessages && len(m.rows) > 0 {
+		m.messageCursor = len(m.rows) - 1
 		m.clampMessageScroll()
 	}
 	if m.focus == focusReader {
@@ -464,6 +480,7 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 
 	m.openFolder = folder.Name
 	m.messages = nil
+	m.rows = nil
 	m.messageCursor = 0
 	m.messageScroll = 0
 	m.msgLoading = true
@@ -507,13 +524,37 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	// The body load returns first; the \Seen command follows in bodyMsg. Both
 	// cannot be batched here because a batch resolves to one BatchMsg, which
 	// makes the follow-up untestable and hides which command failed.
+	if m.markSeenOnLoad == nil {
+		m.markSeenOnLoad = make(map[bodyKey]bool)
+	}
 	if msg.Seen() {
-		m.markSeenOnLoad = bodyKey{}
+		delete(m.markSeenOnLoad, key)
 	} else {
-		m.markSeenOnLoad = key
+		m.markSeenOnLoad[key] = true
 	}
 
 	return m, m.loadBodyCmd(key)
+}
+
+// moveThreadSelection opens the next or previous message of the conversation the
+// cursor is in. It reuses openSelectedMessage, so the body fetch and the
+// mark-as-read intent behave exactly as they do for enter.
+func (m Model) moveThreadSelection(delta int) (tea.Model, tea.Cmd) {
+	thread := m.currentThread()
+
+	for next := m.messageCursor + delta; next >= 0 && next < len(m.rows); next += delta {
+		if m.rows[next].Thread != thread {
+			continue
+		}
+
+		m.messageCursor = next
+		m.readerScroll = 0
+		m.clampMessageScroll()
+
+		return m.openSelectedMessage()
+	}
+
+	return m, nil
 }
 
 // loadBodyCmd loads one message body in the background.
@@ -670,6 +711,8 @@ func (m Model) renderFooter() string {
 		hints = "j/k:choose  enter:open  esc:close"
 	case m.visualActive():
 		hints = "j/k:extend  m:read  f:flag  d:delete  esc:cancel"
+	case m.focus == focusReader:
+		hints = "n:next  p:prev  j/k:scroll  esc:back  m:read  f:flag  d:delete  s:attach"
 	}
 
 	return MutedStyle.Render(Truncate(hints, ContentWidth(m.width)))
