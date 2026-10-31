@@ -68,13 +68,23 @@ type Model struct {
 	folderOverlayCursor int
 
 	confirmOpen   bool
+	confirmKind   confirmKind
 	pendingDelete []imap.UID
 
-	loadFolders    loadFoldersFunc
-	loadMessages   loadMessagesFunc
-	loadBody       loadBodyFunc
-	storeFlags     storeFlagsFunc
-	deleteMessages deleteMessagesFunc
+	compose           *composer
+	composeDraftUID   imap.UID
+	composeDraftKnown bool
+
+	loadFolders      loadFoldersFunc
+	loadMessages     loadMessagesFunc
+	loadBody         loadBodyFunc
+	storeFlags       storeFlagsFunc
+	deleteMessages   deleteMessagesFunc
+	fetchCompose     fetchComposeFunc
+	saveDraft        saveDraftFunc
+	appendSent       appendSentFunc
+	sendMessage      sendMessageFunc
+	findDraftsFolder draftsFolderFunc
 
 	keys bindings
 }
@@ -86,19 +96,24 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 	load := sessionLoaders(sessions)
 
 	m := Model{
-		version:        version,
-		cfg:            cfg,
-		state:          stateConnecting,
-		sessions:       sessions,
-		loadFolders:    load.folders,
-		loadMessages:   load.messages,
-		loadBody:       load.body,
-		storeFlags:     load.storeFlags,
-		deleteMessages: load.deleteMessages,
-		bodies:         make(map[bodyKey]*mail.Body),
-		markSeenOnLoad: make(map[bodyKey]bool),
-		visualAnchor:   noVisualAnchor,
-		keys:           defaultBindings(),
+		version:          version,
+		cfg:              cfg,
+		state:            stateConnecting,
+		sessions:         sessions,
+		loadFolders:      load.folders,
+		loadMessages:     load.messages,
+		loadBody:         load.body,
+		storeFlags:       load.storeFlags,
+		deleteMessages:   load.deleteMessages,
+		fetchCompose:     load.fetchCompose,
+		saveDraft:        load.saveDraft,
+		appendSent:       load.appendSent,
+		sendMessage:      load.sendMessage,
+		findDraftsFolder: load.findDraftsFolder,
+		bodies:           make(map[bodyKey]*mail.Body),
+		markSeenOnLoad:   make(map[bodyKey]bool),
+		visualAnchor:     noVisualAnchor,
+		keys:             defaultBindings(),
 	}
 
 	for i := range cfg.Accounts {
@@ -164,6 +179,21 @@ func (m Model) loadMessagesCmd(folder string) tea.Cmd {
 // Update handles terminal events and loader results.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case draftSavedMsg:
+		m.applyDraftSaved(msg)
+
+		return m, nil
+
+	case sendResultMsg:
+		m.applySendResult(msg)
+
+		return m, nil
+
+	case composeLoadedMsg:
+		m.applyComposeLoaded(msg)
+
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -334,6 +364,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.foldersOpen {
 		return m.handleFoldersKey(msg)
 	}
+	if m.compose != nil {
+		return m.handleComposeKey(msg)
+	}
 
 	switch m.keys.resolve(msg.String()) {
 	case actionQuit, actionForceQuit:
@@ -357,6 +390,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionAccount:
 		m.status = "account selector arrives in M6"
+
+	case actionCompose:
+		return m.beginCompose()
+
+	case actionReply:
+		return m.beginReply(false)
+
+	case actionReplyAll:
+		return m.beginReply(true)
+
+	case actionForward:
+		return m.beginForward()
 
 	case actionReload:
 		m.state = stateConnecting
@@ -508,6 +553,14 @@ func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	}
 
 	key := bodyKey{account: m.accountName(), folder: m.openFolder, uid: msg.UID}
+
+	if len(m.cfg.Accounts) > 0 {
+		if drafts, ok := m.draftsFolder(m.cfg.Accounts[m.account]); ok && drafts == m.openFolder {
+			m.status = ""
+			return m, m.openDraftCmd(m.openFolder, msg.UID)
+		}
+	}
+
 	m.focus = focusReader
 	m.visualAnchor = noVisualAnchor
 
@@ -666,6 +719,10 @@ func (m Model) View() string {
 
 // renderPanels draws the visible panels for the current mode.
 func (m Model) renderPanels(layout Layout) string {
+	if m.compose != nil {
+		return m.renderComposer(layout)
+	}
+
 	readerWidth := max(1, layout.Reader.Width-(2*PanelPaddingHorizontal))
 	folderWidth := max(1, layout.Folders.Width-(2*PanelPaddingHorizontal))
 
@@ -704,8 +761,12 @@ func (m Model) renderFooter() string {
 	hints := "q:quit  j/k:move  enter:open  esc:back  \\:folders  m:read  f:flag  d:delete  v:range  s:attach  r:reload"
 
 	switch {
+	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
+		hints = "enter:discard  esc:keep editing"
 	case m.confirmOpen:
 		hints = "enter:delete  esc:cancel"
+	case m.compose != nil:
+		hints = "ctrl+s:save  ctrl+d:send  tab:field  esc:cancel"
 	case m.attachOpen:
 		hints = "j/k:choose  enter:save  esc:close"
 	case m.foldersOpen:

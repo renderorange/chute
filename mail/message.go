@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
@@ -85,6 +86,48 @@ func (m Message) From() string {
 	}
 
 	return addr.Addr()
+}
+
+// FromAddress is the first sender as a full address, which is what a reply's To header
+// and the attribution line need. From() stays for display: a list column shows the name.
+func (m Message) FromAddress() string {
+	if len(m.Envelope.From) == 0 {
+		return ""
+	}
+
+	return formatAddress(m.Envelope.From[0])
+}
+
+// ToAddresses and CcAddresses return full addresses, so reply-all can reuse them.
+func (m Message) ToAddresses() []string {
+	return formatAddresses(m.Envelope.To)
+}
+
+func (m Message) CcAddresses() []string {
+	return formatAddresses(m.Envelope.Cc)
+}
+
+// formatAddress renders one envelope address as "Name <addr>" or a bare address.
+func formatAddress(addr imap.Address) string {
+	bare := addr.Addr()
+	if addr.Name == "" {
+		return bare
+	}
+
+	return fmt.Sprintf("%s <%s>", addr.Name, bare)
+}
+
+// formatAddresses renders every envelope address, skipping empty ones.
+func formatAddresses(addresses []imap.Address) []string {
+	out := make([]string, 0, len(addresses))
+
+	for _, addr := range addresses {
+		if rendered := formatAddress(addr); rendered != "" {
+			out = append(out, rendered)
+		}
+	}
+
+	return out
 }
 
 // Date is the envelope date, falling back to the server's internal date.

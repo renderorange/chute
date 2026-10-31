@@ -9,6 +9,15 @@ import (
 	"github.com/emersion/go-imap/v2"
 )
 
+// confirmKind says what a confirmation is asking about. The modal text and the action
+// it triggers follow from this, rather than from a second boolean per feature.
+type confirmKind int
+
+const (
+	confirmDelete confirmKind = iota
+	confirmDiscardDraft
+)
+
 // triageReady reports whether the message list owns the selection. Without this
 // guard, pressing m in the folder list would silently mark mail read.
 func (m Model) triageReady() bool {
@@ -29,6 +38,7 @@ func (m Model) beginDelete() (tea.Model, tea.Cmd) {
 	}
 
 	m.confirmOpen = true
+	m.confirmKind = confirmDelete
 	m.pendingDelete = uids
 	m.status = ""
 
@@ -44,9 +54,21 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionQuit, actionBack:
 		m.confirmOpen = false
 		m.pendingDelete = nil
-		m.status = "delete cancelled"
+		if m.confirmKind == confirmDiscardDraft {
+			m.status = "kept editing"
+		} else {
+			m.status = "delete cancelled"
+		}
 
 	case actionOpen:
+		if m.confirmKind == confirmDiscardDraft {
+			m.confirmOpen = false
+			m.compose = nil
+			m.status = "message discarded"
+
+			return m, nil
+		}
+
 		uids := m.pendingDelete
 		m.confirmOpen = false
 		m.pendingDelete = nil
@@ -106,6 +128,16 @@ func (m Model) renderConfirmModal(width, height int) string {
 		fmt.Sprintf("move %s to trash?", countLabel(len(m.pendingDelete), "message")),
 		"",
 		MutedStyle.Render("enter:delete  esc:cancel"),
+	}
+
+	if m.confirmKind == confirmDiscardDraft {
+		lines = []string{
+			TitleStyle.Render("discard"),
+			"",
+			"discard this message? ctrl+s saves it as a draft",
+			"",
+			MutedStyle.Render("enter:discard  esc:keep editing"),
+		}
 	}
 
 	modal := ModalStyle.Render(strings.Join(lines, "\n"))

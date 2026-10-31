@@ -26,6 +26,10 @@ const (
 	actionVisualRange
 	actionNextThreadMessage
 	actionPrevThreadMessage
+	actionCompose
+	actionReply
+	actionReplyAll
+	actionForward
 )
 
 // bindings maps each intent to the keys that trigger it in any mode.
@@ -47,7 +51,7 @@ func defaultBindings() bindings {
 		actionOpen:              {"enter"},
 		actionAttachments:       {"s"},
 		actionFoldersOverlay:    {"\\"},
-		actionReload:            {"r"},
+		actionReload:            {"ctrl+r"},
 		actionAccount:           {"a"},
 		actionToggleRead:        {"m"},
 		actionToggleFlag:        {"f"},
@@ -55,6 +59,10 @@ func defaultBindings() bindings {
 		actionVisualRange:       {"v"},
 		actionNextThreadMessage: {"n"},
 		actionPrevThreadMessage: {"p"},
+		actionCompose:           {"c"},
+		actionReply:             {"r"},
+		actionReplyAll:          {"R"},
+		actionForward:           {"F"},
 	}
 }
 
