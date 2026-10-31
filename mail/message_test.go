@@ -127,3 +127,37 @@ func TestMessagesFromBuffers(t *testing.T) {
 		t.Errorf("nil-envelope Subject = %q, want %q", got, want)
 	}
 }
+
+// TestMessagesFromBuffersThreadingHeaders pins that the two envelope fields
+// threading reads survive the mapping, and that a root message keeps them empty.
+func TestMessagesFromBuffersThreadingHeaders(t *testing.T) {
+	buffers := []*imapclient.FetchMessageBuffer{
+		{
+			UID: 10,
+			Envelope: &imap.Envelope{
+				Subject:   "reply",
+				MessageID: "<reply@example.org>",
+				InReplyTo: []string{"<parent@example.org>"},
+			},
+		},
+		{
+			UID:      11,
+			Envelope: &imap.Envelope{Subject: "root"},
+		},
+	}
+
+	messages := messagesFromBuffers(buffers)
+
+	if got, want := messages[0].MessageID, "<reply@example.org>"; got != want {
+		t.Errorf("MessageID = %q, want %q", got, want)
+	}
+	if len(messages[0].InReplyTo) != 1 || messages[0].InReplyTo[0] != "<parent@example.org>" {
+		t.Errorf("InReplyTo = %v, want the parent id", messages[0].InReplyTo)
+	}
+	if got := messages[1].MessageID; got != "" {
+		t.Errorf("MessageID for a root = %q, want empty", got)
+	}
+	if got := messages[1].InReplyTo; len(got) != 0 {
+		t.Errorf("InReplyTo for a root = %v, want empty", got)
+	}
+}
