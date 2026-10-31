@@ -240,13 +240,13 @@ func (s *Session) resetLocked() {
 }
 
 // defaultConnect resolves the account password and opens an IMAP connection.
-func defaultConnect(acct config.Account) (sessionClient, error) {
+func defaultConnect(acct config.Account, opts ...Option) (sessionClient, error) {
 	password, err := acct.IMAPPassword()
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := Connect(acct, password)
+	client, err := Connect(acct, password, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -262,10 +262,13 @@ type Manager struct {
 	closed   bool
 }
 
-// NewManager builds a manager that connects accounts on first use.
-func NewManager() *Manager {
+// NewManager builds a manager that connects accounts on first use. Connection
+// options, such as a debug writer, apply to every account it connects.
+func NewManager(opts ...Option) *Manager {
 	return &Manager{
-		connect:  defaultConnect,
+		connect: func(acct config.Account) (sessionClient, error) {
+			return defaultConnect(acct, opts...)
+		},
 		sessions: make(map[string]*Session),
 	}
 }

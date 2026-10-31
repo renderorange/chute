@@ -20,9 +20,9 @@ type Client struct {
 }
 
 // Connect opens a TLS connection and logs in. The password is used once and is
-// never retained.
-func Connect(acct config.Account, password string) (*Client, error) {
-	return connectWith(dialTLS, acct, password)
+// retained only to mask itself in the debug stream, if one was requested.
+func Connect(acct config.Account, password string, opts ...Option) (*Client, error) {
+	return connectWith(dialTLS, acct, password, opts...)
 }
 
 // dialFunc opens a protocol connection for config tests and for the in-process
@@ -37,9 +37,19 @@ func dialTLS(address string, options *imapclient.Options) (*imapclient.Client, e
 // connectWith opens a connection through dial, logs in and caches the
 // post-login capabilities. Pre-auth capabilities are not authoritative, so the
 // set is fetched again after login; MOVE and UIDPLUS decide how delete runs.
-func connectWith(dial dialFunc, acct config.Account, password string) (*Client, error) {
+func connectWith(dial dialFunc, acct config.Account, password string, opts ...Option) (*Client, error) {
+	connOpts := newConnectOptions(opts)
+
+	if connOpts.dial != nil {
+		dial = connOpts.dial
+	}
+
 	options := &imapclient.Options{
 		TLSConfig: &tls.Config{ServerName: acct.IMAP.Host},
+	}
+
+	if connOpts.debugWriter != nil {
+		options.DebugWriter = newRedactWriter(connOpts.debugWriter, password)
 	}
 
 	conn, err := dial(acct.IMAPAddress(), options)

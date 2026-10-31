@@ -21,9 +21,10 @@ import (
 
 // testServer is an in-process, memory-backed IMAP server.
 type testServer struct {
-	addr string
-	user *imapmemserver.User
-	log  *syncBuffer
+	addr     string
+	username string
+	user     *imapmemserver.User
+	log      *syncBuffer
 }
 
 // syncBuffer is a concurrency-safe log the server writes protocol traffic into.
@@ -60,8 +61,16 @@ func testCaps() imap.CapSet {
 func newTestServer(t *testing.T, caps imap.CapSet) *testServer {
 	t.Helper()
 
+	return newTestServerWith(t, caps, "tester", "secret")
+}
+
+// newTestServerWith starts a server whose single user has the given credentials,
+// so a test can use a password the encoder has to escape.
+func newTestServerWith(t *testing.T, caps imap.CapSet, username, password string) *testServer {
+	t.Helper()
+
 	backend := imapmemserver.New()
-	user := imapmemserver.NewUser("tester", "secret")
+	user := imapmemserver.NewUser(username, password)
 	if err := user.Create("INBOX", nil); err != nil {
 		t.Fatalf("create INBOX: %v", err)
 	}
@@ -94,7 +103,7 @@ func newTestServer(t *testing.T, caps imap.CapSet) *testServer {
 		listener.Close()
 	})
 
-	return &testServer{addr: listener.Addr().String(), user: user, log: log}
+	return &testServer{addr: listener.Addr().String(), username: username, user: user, log: log}
 }
 
 // account builds the config an in-process client connects with.
@@ -110,7 +119,7 @@ func (s *testServer) account() config.Account {
 
 	return config.Account{
 		Name: "memory",
-		IMAP: config.IMAP{Host: host, Port: port, Username: "tester"},
+		IMAP: config.IMAP{Host: host, Port: port, Username: s.username},
 	}
 }
 

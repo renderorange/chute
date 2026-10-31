@@ -79,9 +79,10 @@ type Model struct {
 	keys bindings
 }
 
-// New builds the root model for a loaded config.
-func New(cfg *config.Config, version string) Model {
-	sessions := mail.NewManager()
+// New builds the root model for a loaded config. mailOptions apply to every account
+// connection the model opens, which is where a debug writer enters the TUI path.
+func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
+	sessions := mail.NewManager(mailOptions...)
 	load := sessionLoaders(sessions)
 
 	m := Model{
