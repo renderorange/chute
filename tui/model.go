@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -337,7 +338,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.status = msg.err.Error()
+			if errors.Is(msg.err, mail.ErrAlreadyInTrash) {
+				m.status = "already in Trash"
+			} else {
+				m.status = msg.err.Error()
+			}
+
 			return m, nil
 		}
 
@@ -733,15 +739,15 @@ func (m Model) renderPanels(layout Layout) string {
 	switch layout.Mode {
 	case ModeThree:
 		return JoinHorizontal(
-			m.renderPanel("folders", layout.Folders, folderBody),
-			m.renderPanel("messages", layout.Messages, messageBody),
-			m.renderPanel("reader", layout.Reader, readerBody),
+			m.renderPanel("folders", layout.Folders, folderBody, m.focus == focusFolders),
+			m.renderPanel("messages", layout.Messages, messageBody, m.focus == focusMessages),
+			m.renderPanel("reader", layout.Reader, readerBody, m.focus == focusReader),
 		)
 
 	case ModeTwo:
 		return JoinHorizontal(
-			m.renderPanel("messages", layout.Messages, messageBody),
-			m.renderPanel("reader", layout.Reader, readerBody),
+			m.renderPanel("messages", layout.Messages, messageBody, m.focus == focusMessages),
+			m.renderPanel("reader", layout.Reader, readerBody, m.focus == focusReader),
 		)
 	}
 
@@ -753,7 +759,7 @@ func (m Model) renderPanels(layout Layout) string {
 		body = readerBody
 	}
 
-	return m.renderPanel(panelTitle(m.focus), layout.Reader, body)
+	return m.renderPanel(panelTitle(m.focus), layout.Reader, body, true)
 }
 
 // renderFooter shows the keys that work right now.

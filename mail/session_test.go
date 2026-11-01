@@ -576,3 +576,20 @@ func TestSessionDeleteDropsConnectionOnError(t *testing.T) {
 		t.Error("the failed client was not closed")
 	}
 }
+
+// TestDeleteInTrashIsRecognisable proves the refusal is a typed error, so the TUI can
+// render "already in Trash" instead of leaking "mail: account ..." into the status bar.
+func TestDeleteInTrashIsRecognisable(t *testing.T) {
+	client := &fakeClient{}
+	session := newSession(config.Account{Name: "memory", IMAP: config.IMAP{Trash: "Trash"}},
+		func(config.Account) (sessionClient, error) { return client, nil })
+	session.folders = []Folder{{Name: "Trash"}}
+
+	err := session.Delete("Trash", []imap.UID{1})
+	if err == nil {
+		t.Fatal("Delete accepted the trash folder as its source")
+	}
+	if !errors.Is(err, ErrAlreadyInTrash) {
+		t.Errorf("error %v does not match ErrAlreadyInTrash", err)
+	}
+}

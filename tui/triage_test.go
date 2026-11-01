@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -674,5 +675,41 @@ func TestTriageKeysAreInertWithoutMessages(t *testing.T) {
 	}
 	if m.status == "" {
 		t.Error("no status was set for an empty selection")
+	}
+}
+
+// TestDeleteInsideTrashReadsAsUserText proves the status bar says "already in Trash"
+// instead of echoing the wrapped account context from the mail layer.
+func TestDeleteInsideTrashReadsAsUserText(t *testing.T) {
+	m, _ := withTriage(t, sampleMessages(2))
+
+	next, _ := m.Update(deleteMsg{
+		account: m.accountName(),
+		folder:  m.openFolder,
+		uids:    []imap.UID{1},
+		err:     fmt.Errorf("%w: account %q: %q", mail.ErrAlreadyInTrash, "fastmail", "Trash"),
+	})
+	m = next.(Model)
+
+	if m.status != "already in Trash" {
+		t.Errorf("status = %q, want %q", m.status, "already in Trash")
+	}
+}
+
+// TestDeleteFailureStillReportsTheRealError proves the mapping is narrow: other failures
+// keep their detail rather than being flattened into a friendly message.
+func TestDeleteFailureStillReportsTheRealError(t *testing.T) {
+	m, _ := withTriage(t, sampleMessages(2))
+
+	next, _ := m.Update(deleteMsg{
+		account: m.accountName(),
+		folder:  m.openFolder,
+		uids:    []imap.UID{1},
+		err:     errors.New("connection refused"),
+	})
+	m = next.(Model)
+
+	if m.status != "connection refused" {
+		t.Errorf("status = %q, want the underlying error text", m.status)
 	}
 }

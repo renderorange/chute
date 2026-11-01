@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/mail"
@@ -19,7 +20,7 @@ func TestRenderPanelFillsBox(t *testing.T) {
 	box := Box{Width: 40, Height: 10}
 	row := strings.Repeat("x", box.Width-(2*PanelPaddingHorizontal))
 
-	panel := m.renderPanel("messages", box, []string{row})
+	panel := m.renderPanel("messages", box, []string{row}, true)
 
 	if got := lipgloss.Width(panel); got != box.Width {
 		t.Errorf("panel width = %d, want %d", got, box.Width)
@@ -252,5 +253,73 @@ func TestViewFillsTerminalWidth(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+// titleLine returns the first rendered content line, where the panel titles sit. The
+// frame's padding occupies the lines above it.
+func titleLine(view string) string {
+	return firstContentLine(view)
+}
+
+// markedPanels reports which panel titles carry the focus marker on a line.
+func markedPanels(line string) []string {
+	var marked []string
+	for _, name := range []string{"folders", "messages", "reader", "compose"} {
+		if strings.Contains(line, "> "+name) {
+			marked = append(marked, name)
+		}
+	}
+
+	return marked
+}
+
+// TestExactlyOnePanelShowsFocus proves the marker exists, is unique, and is visible in
+// plain text at every layout width. Without it, a user pressing m in the folder panel
+// sees nothing happen and no reason why.
+func TestExactlyOnePanelShowsFocus(t *testing.T) {
+	for _, width := range []int{140, 115, 105} {
+		m := sized(width, 40)
+
+		marked := markedPanels(titleLine(m.View()))
+		if len(marked) != 1 {
+			t.Errorf("width %d: %d panels marked, want exactly 1: %v", width, len(marked), marked)
+		}
+	}
+}
+
+// TestTabMovesTheFocusMarker proves the marker follows focus rather than being decorative.
+func TestTabMovesTheFocusMarker(t *testing.T) {
+	m := sized(140, 40)
+
+	before := markedPanels(titleLine(m.View()))
+	if len(before) != 1 {
+		t.Fatalf("start: marked %v", before)
+	}
+
+	for i := 0; i < 3; i++ {
+		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = next.(Model)
+
+		marked := markedPanels(titleLine(m.View()))
+		if len(marked) != 1 {
+			t.Fatalf("after tab %d: %d panels marked: %v", i+1, len(marked), marked)
+		}
+		if marked[0] == before[0] {
+			t.Errorf("after tab %d: marker stayed on %s", i+1, marked[0])
+		}
+
+		before = marked
+	}
+}
+
+// TestComposerShowsFocus proves the composer counts as the focused panel while it is open.
+func TestComposerShowsFocus(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m = press(t, m, keyMsg("r"))
+
+	marked := markedPanels(titleLine(m.View()))
+	if len(marked) != 1 || marked[0] != "compose" {
+		t.Errorf("marked %v, want only compose", marked)
 	}
 }
