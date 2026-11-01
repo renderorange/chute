@@ -9,7 +9,11 @@ import (
 
 // renderPanel draws one panel inside its box: a title line, then the body, padded
 // to the box size. Vertical geometry comes from the box, never recomputed here.
-func (m Model) renderPanel(title string, box Box, body []string) string {
+//
+// A focused panel says so in its title, with a character rather than colour alone: the
+// triage keys are inert outside the message list, and without this the user cannot tell
+// why a keypress did nothing.
+func (m Model) renderPanel(title string, box Box, body []string, focused bool) string {
 	if box.Empty() {
 		return ""
 	}
@@ -24,7 +28,12 @@ func (m Model) renderPanel(title string, box Box, body []string) string {
 	}
 
 	lines := make([]string, 0, box.Height)
-	lines = append(lines, TitleStyle.Render(TruncateDisplay(title, innerWidth)))
+	titleStyle, label := MutedStyle, title
+	if focused {
+		titleStyle, label = TitleStyle, "> "+title
+	}
+
+	lines = append(lines, titleStyle.Render(TruncateDisplay(label, innerWidth)))
 
 	for _, line := range body {
 		if len(lines) >= box.Height {

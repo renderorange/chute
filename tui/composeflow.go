@@ -447,5 +447,5 @@ func (m Model) renderComposer(layout Layout) string {
 
 	body := m.compose.view(inner, max(1, box.Height-1))
 
-	return m.renderPanel("compose", box, body)
+	return m.renderPanel("compose", box, body, true)
 }
