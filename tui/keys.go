@@ -23,6 +23,7 @@ const (
 	actionToggleRead
 	actionToggleFlag
 	actionDelete
+	actionFilter
 	actionVisualRange
 	actionNextThreadMessage
 	actionPrevThreadMessage
@@ -56,6 +57,7 @@ func defaultBindings() bindings {
 		actionToggleRead:        {"m"},
 		actionToggleFlag:        {"f"},
 		actionDelete:            {"d"},
+		actionFilter:            {"/"},
 		actionVisualRange:       {"v"},
 		actionNextThreadMessage: {"n"},
 		actionPrevThreadMessage: {"p"},

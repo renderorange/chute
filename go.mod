@@ -10,6 +10,7 @@ require (
 	github.com/emersion/go-message v0.18.2
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/muesli/termenv v0.16.0
+	github.com/sahilm/fuzzy v0.1.3
 )
 
 require (

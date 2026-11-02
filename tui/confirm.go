@@ -135,10 +135,10 @@ func (m *Model) forgetBodies(uids []imap.UID) {
 	}
 }
 
-// followDeleted re-opens the message the cursor landed on, so deleting from the
-// reading pane moves it to the neighbour instead of leaving an empty selection.
-// With nothing left to read, focus goes back to the message list.
-func (m Model) followDeleted() (Model, tea.Cmd) {
+// followRows re-opens the message the cursor landed on after the visible rows
+// changed, whether that was a delete or a filter. With nothing left to read it
+// hands focus back to the message list, so the reading pane never sits empty.
+func (m Model) followRows() (Model, tea.Cmd) {
 	if m.focus != focusReader {
 		return m, nil
 	}
