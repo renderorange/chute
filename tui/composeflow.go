@@ -105,10 +105,16 @@ func (m Model) beginReply(all bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// The original's full References chain is not fetched for the list, so the best chain
-	// available is the parent recorded in In-Reply-To. mail.ReplyCompose appends the
-	// message's own id to that chain, so the id must not be added here as well or the
-	// parent appears twice.
+	// The body fetch asks for the whole message, so the original's own References chain
+	// is available: it lists the ancestors above the parent. Fall back to the envelope's
+	// In-Reply-To when the original carries no References header (old or non-conforming
+	// mail); it names only the immediate ancestor, which is still better than nothing.
+	// mail.ReplyCompose appends the parent's own id below, so it must not be added here.
+	references := append([]string(nil), body.References...)
+	if len(references) == 0 {
+		references = append(references, msg.InReplyTo...)
+	}
+
 	orig := mail.Compose{
 		From:       msg.FromAddress(),
 		To:         msg.ToAddresses(),
@@ -116,7 +122,7 @@ func (m Model) beginReply(all bool) (tea.Model, tea.Cmd) {
 		Subject:    msg.Subject(),
 		Text:       body.Text,
 		MessageID:  msg.MessageID,
-		References: append([]string(nil), msg.InReplyTo...),
+		References: references,
 	}
 
 	bottom := m.cfg.General.ReplyAtBottom()
