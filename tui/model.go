@@ -387,9 +387,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.removeDeleted(msg.uids)
-		m.status = fmt.Sprintf("moved %s to trash", countLabel(len(msg.uids), "message"))
 
-		return m, nil
+		// Set the status after following the delete: opening the neighbouring
+		// message clears the status bar, and the move confirmation has to win.
+		next, cmd := m.followDeleted()
+		next.status = fmt.Sprintf("moved %s to trash", countLabel(len(msg.uids), "message"))
+
+		return next, cmd
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
