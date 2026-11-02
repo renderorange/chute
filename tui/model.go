@@ -822,30 +822,12 @@ func (m Model) renderPanels(layout Layout) string {
 	return m.renderPanel(panelTitle(m.focus), layout.Reader, body, true)
 }
 
-// renderFooter shows the keys that work right now.
+// renderFooter shows the keys that work right now, in priority order, as many as
+// fit. The hints come from the binding table (tui/footer.go), so a rebound key
+// cannot leave a stale hint behind, and the footer drops whole hints rather than
+// cutting one in half.
 func (m Model) renderFooter() string {
-	hints := "q:quit  j/k:move  enter:open  esc:back  \\:folders  m:read  f:flag  d:delete  v:range  s:attach  a:account  r:reload"
-
-	switch {
-	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
-		hints = "enter:discard  esc:keep editing"
-	case m.confirmOpen:
-		hints = "enter:delete  esc:cancel"
-	case m.compose != nil:
-		hints = "ctrl+s:save  ctrl+d:send  tab:field  esc:cancel"
-	case m.accountsOpen:
-		hints = "enter:switch  esc:close"
-	case m.attachOpen:
-		hints = "j/k:choose  enter:save  esc:close"
-	case m.foldersOpen:
-		hints = "j/k:choose  enter:open  esc:close"
-	case m.visualActive():
-		hints = "j/k:extend  m:read  f:flag  d:delete  esc:cancel"
-	case m.focus == focusReader:
-		hints = "n:next  p:prev  j/k:scroll  esc:back  m:read  f:flag  d:delete  s:attach"
-	}
-
-	return MutedStyle.Render(Truncate(hints, ContentWidth(m.width)))
+	return MutedStyle.Render(packHints(m.keys, m.footerHints(), ContentWidth(m.width)))
 }
 
 // renderStatusBar shows the account, connection state, folder count and messages.
