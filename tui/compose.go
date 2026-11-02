@@ -44,6 +44,12 @@ type composer struct {
 	// id is the Message-ID for this message, fixed when the composer opens so the
 	// draft and the sent copy carry the same one.
 	id string
+
+	// inReplyTo and references are the threading headers. mail.ReplyCompose computes
+	// them, and the composer must carry them: it is the only thing that survives between
+	// opening the reply and saving or sending it, so anything it does not hold is lost.
+	inReplyTo  string
+	references []string
 }
 
 // newComposer builds a composer from a pre-filled message. bottom opens the body at its
@@ -61,6 +67,8 @@ func newComposer(initial mail.Compose, bottom bool) *composer {
 	c.subject.setText(initial.Subject)
 	c.body.setText(initial.Text)
 	c.id = initial.MessageID
+	c.inReplyTo = initial.InReplyTo
+	c.references = append([]string(nil), initial.References...)
 
 	if bottom {
 		c.body.cursorEnd()
@@ -86,14 +94,18 @@ func (c *composer) field() *editor {
 }
 
 // compose returns the message as it stands. The Message-ID is generated once, by the
-// model, and carried through every save and send of this message.
+// model, and carried through every save and send of this message; the threading headers
+// are carried the same way, because a reply that loses them is filed beside the original
+// instead of under it.
 func (c *composer) compose() mail.Compose {
 	return mail.Compose{
-		To:        splitField(c.to.text()),
-		Cc:        splitField(c.cc.text()),
-		Subject:   c.subject.text(),
-		Text:      c.body.text(),
-		MessageID: c.id,
+		To:         splitField(c.to.text()),
+		Cc:         splitField(c.cc.text()),
+		Subject:    c.subject.text(),
+		Text:       c.body.text(),
+		MessageID:  c.id,
+		InReplyTo:  c.inReplyTo,
+		References: append([]string(nil), c.references...),
 	}
 }
 

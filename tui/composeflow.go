@@ -105,14 +105,10 @@ func (m Model) beginReply(all bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// The original's full References chain is not fetched for the list, so the chain
-	// this reply carries is the parent recorded in In-Reply-To plus the parent itself.
-	// That is enough for In-Reply-To threading, which is what every client reads.
-	references := append([]string(nil), msg.InReplyTo...)
-	if msg.MessageID != "" {
-		references = append(references, msg.MessageID)
-	}
-
+	// The original's full References chain is not fetched for the list, so the best chain
+	// available is the parent recorded in In-Reply-To. mail.ReplyCompose appends the
+	// message's own id to that chain, so the id must not be added here as well or the
+	// parent appears twice.
 	orig := mail.Compose{
 		From:       msg.FromAddress(),
 		To:         msg.ToAddresses(),
@@ -120,7 +116,7 @@ func (m Model) beginReply(all bool) (tea.Model, tea.Cmd) {
 		Subject:    msg.Subject(),
 		Text:       body.Text,
 		MessageID:  msg.MessageID,
-		References: references,
+		References: append([]string(nil), msg.InReplyTo...),
 	}
 
 	bottom := m.cfg.General.ReplyAtBottom()
