@@ -282,11 +282,16 @@ func TestUnseenFailureStaysSelectable(t *testing.T) {
 	}
 }
 
-func TestFooterShowsAccountHint(t *testing.T) {
+// TestFooterDoesNotAdvertiseTheAccountKey pins the #26 decision that the footer
+// carries only the keys that prevent a mistake. The account switcher still works
+// on `a`; it is documented in the help screen (#21) rather than the footer, which
+// the owner reported as overwhelming. If the footer ever grows a hint again, this
+// test should be rewritten with the issue that reintroduces it.
+func TestFooterDoesNotAdvertiseTheAccountKey(t *testing.T) {
 	view := sized(140, 40).View()
 
-	if !strings.Contains(view, "a:account") {
-		t.Errorf("footer does not advertise the account key:\n%s", view)
+	if strings.Contains(view, "a:account") {
+		t.Errorf("footer advertises the account key again:\n%s", view)
 	}
 }
 

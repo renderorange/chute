@@ -13,10 +13,12 @@ type footerCase struct {
 	m    Model
 }
 
-// footerDefaultHints is the default footer at 105 columns, hint for hint. It is
-// asserted whole rather than by substring so a hint that grows past the budget
-// fails here instead of being silently dropped.
-const footerDefaultHints = "d:delete f:flag m:read enter:open q:quit esc:back c:compose r:reply R:reply-all F:forward a:account"
+// footerDefaultHints is the default footer at every supported width, hint for
+// hint. It is asserted whole rather than by substring so a hint that grows past
+// the budget fails here instead of being silently dropped. The owner asked for
+// this set to shrink to the mistake-preventing keys (#26): the footer is a
+// reminder, not the keymap, and the rest waits for the help screen.
+const footerDefaultHints = "d:delete f:flag m:read enter:open q:quit"
 
 // footerCases builds one model per footer context. Every model is 105 columns
 // unless the case is about the composer, whose hints are wider.
@@ -106,17 +108,17 @@ func TestFooterKeysResolveToTheirActions(t *testing.T) {
 }
 
 // TestFooterFollowsARebind proves the hints come from the binding table rather
-// than from a second copy of the keymap: rebinding reply moves the hint with it.
+// than from a second copy of the keymap: rebinding delete moves the hint with it.
 func TestFooterFollowsARebind(t *testing.T) {
 	m := sized(105, 40)
-	m.keys[actionReply] = []string{"z"}
+	m.keys[actionDelete] = []string{"x"}
 
 	footer := m.renderFooter()
 
-	if !strings.Contains(footer, "z:reply") {
+	if !strings.Contains(footer, "x:delete") {
 		t.Errorf("footer does not follow the rebind: %q", footer)
 	}
-	if strings.Contains(footer, "r:reply") {
+	if strings.Contains(footer, "d:delete") {
 		t.Errorf("footer still advertises the old key: %q", footer)
 	}
 }
@@ -124,18 +126,19 @@ func TestFooterFollowsARebind(t *testing.T) {
 // TestFooterRemovedBindingIsDropped proves a hint disappears when its action has
 // no keys, instead of rendering a bare ":label".
 func TestFooterRemovedBindingIsDropped(t *testing.T) {
-	m := sized(130, 40)
-	m.keys[actionReplyAll] = nil
+	m := sized(105, 40)
+	m.keys[actionToggleFlag] = nil
 
 	footer := m.renderFooter()
 
-	if strings.Contains(footer, "reply-all") {
+	if strings.Contains(footer, "flag") {
 		t.Errorf("footer names an action that has no binding: %q", footer)
 	}
 }
 
 // TestFooterAt105IsTheFullSet pins the tablet footer exactly: the priority keys,
-// back, and the four M5/M6 keys that had no hint at all.
+// nothing else. #26 cut this from ten hints to five on the owner's report that
+// the footer was overwhelming.
 func TestFooterAt105IsTheFullSet(t *testing.T) {
 	m := sized(105, 40)
 
@@ -158,38 +161,49 @@ func TestFooterAt105FillsTheBudget(t *testing.T) {
 	}
 }
 
-// TestFooterAt60DropsWholeHints proves the narrow footer ends at a hint boundary
-// rather than cutting one mid-token, which is what the old string did.
-func TestFooterAt60DropsWholeHints(t *testing.T) {
+// TestFooterAt60KeepsWholeHints proves the narrow footer drops nothing at the
+// supported floor: the five hints fit in 54 cells.
+func TestFooterAt60KeepsWholeHints(t *testing.T) {
 	m := sized(60, 40)
 	footer := m.renderFooter()
 
-	const want = "d:delete f:flag m:read enter:open q:quit esc:back"
-	if footer != want {
-		t.Errorf("footer at 60 = %q, want %q", footer, want)
-	}
-	if !strings.HasPrefix(footerDefaultHints, footer) {
-		t.Errorf("footer at 60 is not a whole-hint prefix of the 105 footer: %q", footer)
-	}
-	if strings.Contains(footer, "...") {
-		t.Errorf("footer at 60 truncated a hint: %q", footer)
+	if footer != footerDefaultHints {
+		t.Errorf("footer at 60 = %q, want %q", footer, footerDefaultHints)
 	}
 	if got, limit := lipgloss.Width(footer), ContentWidth(60); got > limit {
 		t.Errorf("footer at 60 is %d cells, want at most %d", got, limit)
 	}
 }
 
-// TestFooterAt130ShowsControlRReload covers the other half of the defect: reload
-// is ctrl+r, and the hint appears once the width allows it.
-func TestFooterAt130ShowsControlRReload(t *testing.T) {
-	m := sized(130, 40)
+// TestFooterDropsWholeHintsWhenItMust keeps the packing rule covered. The default
+// set fits from 60 columns up, so the drop path is exercised just below it: at 40
+// columns the quit hint no longer fits and is dropped whole, never cut.
+func TestFooterDropsWholeHintsWhenItMust(t *testing.T) {
+	m := sized(40, 20)
 	footer := m.renderFooter()
 
-	if !strings.Contains(footer, "ctrl+r:reload") {
-		t.Errorf("footer at 130 does not show ctrl+r:reload: %q", footer)
+	const want = "d:delete f:flag m:read enter:open"
+	if footer != want {
+		t.Errorf("footer at 40 = %q, want %q", footer, want)
 	}
-	if got, limit := lipgloss.Width(footer), ContentWidth(130); got > limit {
-		t.Errorf("footer at 130 is %d cells, want at most %d: %q", got, limit, footer)
+	if !strings.HasPrefix(footerDefaultHints, footer) {
+		t.Errorf("footer at 40 is not a whole-hint prefix of the full set: %q", footer)
+	}
+	if strings.Contains(footer, "...") {
+		t.Errorf("footer truncated a hint: %q", footer)
+	}
+	if strings.Contains(footer, "q:quit") {
+		t.Errorf("footer kept a hint that cannot fit: %q", footer)
+	}
+}
+
+// TestFooterWideStaysCalm is the other half of #26: a wider terminal must not
+// invite more hints back in. The set is fixed; the width is only a safety net.
+func TestFooterWideStaysCalm(t *testing.T) {
+	for _, width := range []int{120, 130, 140, 200} {
+		if got := sized(width, 40).renderFooter(); got != footerDefaultHints {
+			t.Errorf("footer at %d = %q, want the five-hint set", width, got)
+		}
 	}
 }
 
@@ -209,7 +223,7 @@ func TestFooterNeverSaysRReload(t *testing.T) {
 // that none of them is truncated at the tablet width.
 func TestFooterModalContexts(t *testing.T) {
 	want := map[string][]string{
-		"reader":          {"n:next", "p:prev", "s:attach", "q:quit"},
+		"reader":          {"n:next", "p:prev", "q:quit"},
 		"reader narrow":   {"n:next", "p:prev"},
 		"visual range":    {"j/k:extend", "esc:cancel", "d:delete"},
 		"confirm delete":  {"enter:delete", "esc:cancel"},
