@@ -111,13 +111,13 @@ func TestStaleFoldersMessageIgnored(t *testing.T) {
 func TestFolderCursorClamps(t *testing.T) {
 	m := loaded(t, 140, 40, sampleFolders(5), nil)
 
-	up, _ := m.Update(keyMsg("k"))
+	up, _ := m.Update(namedKey("up"))
 	if got := up.(Model).folderCursor; got != 0 {
 		t.Errorf("cursor after k at top = %d, want 0", got)
 	}
 
 	for i := 0; i < 20; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 	if got, want := m.folderCursor, 4; got != want {
@@ -144,7 +144,7 @@ func TestFolderScrollFollowsCursor(t *testing.T) {
 	}
 
 	for i := 0; i < 20; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 
@@ -164,7 +164,7 @@ func TestFolderScrollFollowsCursor(t *testing.T) {
 func TestResizeClampsFolderScroll(t *testing.T) {
 	m := loaded(t, 140, 16, sampleFolders(40), nil)
 	for i := 0; i < 30; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 

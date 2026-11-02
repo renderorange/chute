@@ -34,7 +34,7 @@ func TestFoldersOverlaySelectsFolder(t *testing.T) {
 
 	next, _ := m.Update(keyMsg("\\"))
 	m = next.(Model)
-	next, _ = m.Update(keyMsg("j"))
+	next, _ = m.Update(namedKey("down"))
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)

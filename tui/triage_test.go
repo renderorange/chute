@@ -188,7 +188,7 @@ func TestVisualRangeSelectsRows(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
-		next, _ = m.Update(keyMsg("j"))
+		next, _ = m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 
@@ -215,7 +215,7 @@ func TestVisualRangeSendsOneCommand(t *testing.T) {
 	next, _ := m.Update(keyMsg("v"))
 	m = next.(Model)
 	for i := 0; i < 19; i++ {
-		next, _ = m.Update(keyMsg("j"))
+		next, _ = m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 
@@ -245,7 +245,7 @@ func TestRangeAboveAnchorSelectsRows(t *testing.T) {
 	m = next.(Model)
 
 	for i := 0; i < 2; i++ {
-		next, _ = m.Update(keyMsg("k"))
+		next, _ = m.Update(namedKey("up"))
 		m = next.(Model)
 	}
 
@@ -451,7 +451,7 @@ func TestDeleteRangeRemovesEveryRow(t *testing.T) {
 	next, _ := m.Update(keyMsg("v"))
 	m = next.(Model)
 	for i := 0; i < 2; i++ {
-		next, _ = m.Update(keyMsg("j"))
+		next, _ = m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 
@@ -588,7 +588,7 @@ func TestOpeningMessageClearsVisualRange(t *testing.T) {
 
 	next, _ := m.Update(keyMsg("v"))
 	m = next.(Model)
-	next, _ = m.Update(keyMsg("j"))
+	next, _ = m.Update(namedKey("down"))
 	m = next.(Model)
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
