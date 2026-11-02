@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/renderorange/chute/mail"
@@ -32,6 +33,10 @@ func namedKey(name string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyLeft}
 	case "right":
 		return tea.KeyMsg{Type: tea.KeyRight}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
 	case "home":
 		return tea.KeyMsg{Type: tea.KeyHome}
 	case "end":
@@ -262,5 +267,100 @@ func TestComposerScrollsToKeepTheCursorVisible(t *testing.T) {
 	}
 	if c.scroll == 0 {
 		t.Error("the composer did not scroll to the cursor at the end of a long body")
+	}
+}
+
+// TestComposerRoutesEveryArrowToTheFocusedField proves right, up and down move the cursor
+// in the focused editor. Left is covered above; these three are the rest of the pair, and
+// a global binding reaching them would move the list instead of the text.
+func TestComposerRoutesEveryArrowToTheFocusedField(t *testing.T) {
+	c := newComposer(mail.Compose{Text: "ab\ncd"}, false)
+	c.focus = composerBody
+
+	c.update(namedKey("right"))
+	if c.body.col != 1 {
+		t.Errorf("right left the cursor at column %d, want 1", c.body.col)
+	}
+
+	c.update(namedKey("down"))
+	if c.body.row != 1 {
+		t.Errorf("down left the cursor on row %d, want 1", c.body.row)
+	}
+
+	c.update(namedKey("up"))
+	if c.body.row != 0 {
+		t.Errorf("up left the cursor on row %d, want 0", c.body.row)
+	}
+
+	if got := c.body.text(); got != "ab\ncd" {
+		t.Errorf("body = %q, want the arrows to move the cursor and not edit", got)
+	}
+	if c.dirty {
+		t.Error("moving the cursor marked the composer dirty")
+	}
+}
+
+// TestComposerCursorMarksTheCharacterUnderIt proves the reversed cell sits on the
+// character at the cursor, and becomes a trailing space when the cursor is past the end,
+// which is what makes an empty field look focused.
+func TestComposerCursorMarksTheCharacterUnderIt(t *testing.T) {
+	reversed := func(s string) string { return lipgloss.NewStyle().Reverse(true).Render(s) }
+
+	under := withCursor("ab", 0)
+	if want := reversed("a") + "b"; under != want {
+		t.Errorf("cursor on the first character = %q, want %q", under, want)
+	}
+
+	past := withCursor("ab", 9)
+	if want := "ab" + reversed(" "); past != want {
+		t.Errorf("cursor past the end = %q, want %q", past, want)
+	}
+	if got := lipgloss.Width(past); got != 3 {
+		t.Errorf("cursor past the end is %d cells wide, want 3", got)
+	}
+}
+
+// TestComposerAtAShortPanelKeepsOneBodyRow proves a panel too short for the three header
+// fields plus a body still allocates a body row, rather than composing an empty panel.
+func TestComposerAtAShortPanelKeepsOneBodyRow(t *testing.T) {
+	c := newComposer(mail.Compose{Text: "body"}, false)
+
+	rows := c.view(20, composerFields)
+	if len(rows) != composerFields {
+		t.Fatalf("%d rows, want the %d header rows only: %v", len(rows), composerFields, rows)
+	}
+
+	rows = c.view(20, composerFields+1)
+	if len(rows) != composerFields+1 {
+		t.Fatalf("%d rows, want room for one body row: %v", len(rows), rows)
+	}
+	if last := rows[len(rows)-1]; !strings.Contains(last, "body") {
+		t.Errorf("last row = %q, want the body text", last)
+	}
+}
+
+// TestComposerScrollReturnsWhenTheBodyShrinks proves the scroll offset follows the cursor
+// back after the text is replaced with something shorter, instead of staying past the end
+// and rendering a blank body.
+func TestComposerScrollReturnsWhenTheBodyShrinks(t *testing.T) {
+	lines := make([]string, 40)
+	for i := range lines {
+		lines[i] = "line"
+	}
+
+	c := newComposer(mail.Compose{Text: strings.Join(lines, "\n")}, true)
+	c.view(40, 10)
+	if c.scroll == 0 {
+		t.Fatal("the composer did not scroll to the end of a long body")
+	}
+
+	c.body.setText("short")
+	rows := c.view(40, 10)
+
+	if c.scroll != 0 {
+		t.Errorf("scroll = %d after the body shrank, want 0", c.scroll)
+	}
+	if joined := strings.Join(rows, "\n"); !strings.Contains(joined, "short") {
+		t.Errorf("the body is not visible after shrinking:\n%s", joined)
 	}
 }

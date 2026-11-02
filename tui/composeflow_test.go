@@ -558,3 +558,192 @@ func TestForwardWithoutBodySaysSo(t *testing.T) {
 		t.Errorf("status = %q", m.status)
 	}
 }
+
+// TestReplyAndForwardNeedTheListOrReader proves r, R and F do nothing while the folders
+// panel has focus: starting a message from the folder list is how a mis-aimed keypress
+// would otherwise reach the server.
+func TestReplyAndForwardNeedTheListOrReader(t *testing.T) {
+	for _, k := range []string{"r", "R", "F"} {
+		m, fakes := withComposeModel(t)
+		m.focus = focusFolders
+
+		m = press(t, m, keyMsg(k))
+
+		if m.compose != nil {
+			t.Fatalf("%s opened a composer from the folders panel", k)
+		}
+		if len(fakes.order) != 0 {
+			t.Errorf("%s reached the server: %v", k, fakes.order)
+		}
+		if m.status != "" {
+			t.Errorf("%s set the status to %q, want silence", k, m.status)
+		}
+	}
+}
+
+// TestReplyWithoutAFromAddressSaysSo proves a reply from an account with no From is
+// refused at the point of opening, with the fix, rather than failing at send time.
+func TestReplyWithoutAFromAddressSaysSo(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m.cfg.Accounts[m.account].From = ""
+	m.cfg.Accounts[m.account].IMAP.Username = ""
+
+	m = press(t, m, keyMsg("r"))
+
+	if m.compose != nil {
+		t.Fatal("a reply opened with no From address")
+	}
+	if !strings.Contains(m.status, "From address") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// TestForwardWithoutAFromAddressSaysSo is the same guard on the forward path.
+func TestForwardWithoutAFromAddressSaysSo(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m.cfg.Accounts[m.account].From = ""
+	m.cfg.Accounts[m.account].IMAP.Username = ""
+
+	m = press(t, m, keyMsg("F"))
+
+	if m.compose != nil {
+		t.Fatal("a forward opened with no From address")
+	}
+	if !strings.Contains(m.status, "From address") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// TestForwardWithoutASelectionSaysSo proves F with no open folder reports that there is
+// nothing to forward instead of opening an empty one.
+func TestForwardWithoutASelectionSaysSo(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m.openFolder = ""
+
+	m = press(t, m, keyMsg("F"))
+
+	if m.compose != nil {
+		t.Fatal("a forward opened with no folder open")
+	}
+	if !strings.Contains(m.status, "no message selected") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// TestEscapeClosesACleanComposer proves esc leaves the composer immediately when nothing
+// was edited: only a dirty composer asks, because only a dirty one has text to lose.
+func TestEscapeClosesACleanComposer(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m = press(t, m, keyMsg("r"))
+	m.status = "something else"
+
+	m = press(t, m, namedKey("esc"))
+
+	if m.compose != nil {
+		t.Error("esc left a clean composer open")
+	}
+	if m.status != "" {
+		t.Errorf("status = %q, want the closed composer to clear it", m.status)
+	}
+	if m.confirmOpen {
+		t.Error("esc on a clean composer asked for a confirmation")
+	}
+}
+
+// TestReplyWithoutASelectionSaysSo proves r with no folder open reports that there is
+// nothing to reply to instead of opening a composer with no recipient.
+func TestReplyWithoutASelectionSaysSo(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m.openFolder = ""
+
+	m = press(t, m, keyMsg("r"))
+
+	if m.compose != nil {
+		t.Fatal("a reply opened with no folder open")
+	}
+	if !strings.Contains(m.status, "no message selected") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// TestMessageForAlwaysCarriesAnID proves a message built from a composer without an id
+// still gets one, so no outgoing message reaches SMTP without a Message-ID.
+func TestMessageForAlwaysCarriesAnID(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m.compose = newComposer(mail.Compose{
+		From: "me@example.org",
+		To:   []string{"you@example.org"},
+	}, false)
+
+	raw, err := m.messageFor()
+	if err != nil {
+		t.Fatalf("messageFor: %v", err)
+	}
+	if !strings.Contains(string(raw), "Message-Id: <") {
+		t.Errorf("the built message has no Message-ID:\n%s", raw)
+	}
+}
+
+// TestComposeResultsForAnotherAccountAreIgnored proves a save, send or draft fetch that
+// finishes after the user switches accounts cannot rewrite the new account's status or
+// replace the message being edited.
+func TestComposeResultsForAnotherAccountAreIgnored(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m = press(t, m, keyMsg("r"))
+	m.status = "untouched"
+	editing := m.compose
+
+	m.applyDraftSaved(draftSavedMsg{account: "other", err: errors.New("save failed")})
+	m.applySendResult(sendResultMsg{account: "other", err: errors.New("send failed")})
+	m.applyComposeLoaded(composeLoadedMsg{account: "other", compose: mail.Compose{Subject: "someone else's draft"}})
+
+	if m.status != "untouched" {
+		t.Errorf("status = %q, want it untouched by another account's result", m.status)
+	}
+	if m.compose != editing {
+		t.Error("another account's draft replaced the message being edited")
+	}
+}
+
+// TestOpeningADraftReportsAFailedFetch proves a draft that cannot be fetched says so and
+// leaves the list alone, instead of opening an empty composer.
+func TestOpeningADraftReportsAFailedFetch(t *testing.T) {
+	m := openInbox(t, withInbox(t, sampleMessages(1), nil))
+	m.openFolder = "Drafts"
+	m.findDraftsFolder = func(config.Account) (string, bool) { return "Drafts", true }
+	m.fetchCompose = func(config.Account, string, imap.UID) (*mail.Compose, error) {
+		return nil, errors.New("no such message")
+	}
+
+	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.compose != nil {
+		t.Error("a failed draft fetch opened a composer")
+	}
+	if !strings.Contains(m.status, "draft not opened") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// TestSendWithoutSMTPIsReported proves an account with no send configured fails loudly
+// and keeps the draft, rather than appearing to have sent.
+func TestSendWithoutSMTPIsReported(t *testing.T) {
+	m, fakes := withComposeModel(t)
+	m.sendMessage = nil
+	m = press(t, m, keyMsg("r"))
+
+	m.composeDraftUID = 7
+	m.composeDraftKnown = true
+
+	m = press(t, m, namedKey("ctrl+d"))
+
+	if m.compose == nil {
+		t.Error("the composer closed on a send that never happened")
+	}
+	if len(fakes.order) != 0 {
+		t.Errorf("steps = %v, want none", fakes.order)
+	}
+	if !strings.Contains(m.status, "no SMTP") {
+		t.Errorf("status = %q", m.status)
+	}
+}

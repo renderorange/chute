@@ -323,3 +323,104 @@ func TestComposerShowsFocus(t *testing.T) {
 		t.Errorf("marked %v, want only compose", marked)
 	}
 }
+
+// TestViewAtTheMinimumSize renders 60x20, the floor the design promises and that the M6
+// gate names. layout_test.go proves the arithmetic; this proves the frame composes at it:
+// every line fills the terminal, the focused panel shows its body, and the footer and
+// status bar are both there.
+func TestViewAtTheMinimumSize(t *testing.T) {
+	const width, height = 60, 20
+
+	// The numbers the gate is stated in: 54 content cells and 14 content rows.
+	if got := ContentWidth(width); got != 54 {
+		t.Fatalf("ContentWidth(%d) = %d, want 54", width, got)
+	}
+	if got := ContentHeight(height); got != 14 {
+		t.Fatalf("ContentHeight(%d) = %d, want 14", height, got)
+	}
+
+	for _, tc := range []struct {
+		focus   panelFocus
+		title   string
+		content string
+		hint    string
+	}{
+		{focusFolders, "folders", "INBOX", "q:quit"},
+		{focusMessages, "messages", "subject 03", "q:quit"},
+		{focusReader, "reader", "subject 03", "n:next"},
+	} {
+		m := loaded(t, width, height, sampleFolders(3), nil)
+		m.loadMessages = fakeMessages(sampleMessages(3), nil)
+		m = openInbox(t, m)
+		m.focus = tc.focus
+
+		view := m.View()
+		lines := strings.Split(view, "\n")
+
+		if len(lines) != height {
+			t.Fatalf("%s: %d lines, want %d", tc.title, len(lines), height)
+		}
+		for i, line := range lines {
+			if got := lipgloss.Width(line); got != width {
+				t.Fatalf("%s: line %d is %d cells, want %d: %q", tc.title, i, got, width, line)
+			}
+		}
+
+		if got := titleLine(view); !strings.Contains(got, tc.title) {
+			t.Errorf("%s: the panel title is not on the title line: %q", tc.title, got)
+		}
+		if !strings.Contains(view, tc.content) {
+			t.Errorf("%s: the panel body is empty, missing %q:\n%s", tc.title, tc.content, view)
+		}
+		if footer := lines[len(lines)-4]; !strings.Contains(footer, tc.hint) {
+			t.Errorf("%s: the footer is missing %q: %q", tc.title, tc.hint, footer)
+		}
+		if status := lines[len(lines)-2]; !strings.Contains(status, "[fastmail]") {
+			t.Errorf("%s: the status bar is missing: %q", tc.title, status)
+		}
+	}
+}
+
+// TestViewAtEachBreakpointHasNoEmptyPanel proves the two-pane and three-pane layouts at
+// exactly their breakpoints draw every panel they claim to, so neither mode has a box
+// that collapses to zero at the width that selects it.
+func TestViewAtEachBreakpointHasNoEmptyPanel(t *testing.T) {
+	for _, tc := range []struct {
+		width  int
+		mode   Mode
+		titles []string
+	}{
+		{NarrowBreakpoint, ModeTwo, []string{"messages", "reader"}},
+		{ThreeColumnBreakpoint, ModeThree, []string{"folders", "messages", "reader"}},
+	} {
+		layout := ComputeLayout(tc.width, 20)
+		if layout.Mode != tc.mode {
+			t.Fatalf("width %d chose mode %v, want %v", tc.width, layout.Mode, tc.mode)
+		}
+
+		visible := map[string]Box{"messages": layout.Messages, "reader": layout.Reader}
+		if tc.mode == ModeThree {
+			visible["folders"] = layout.Folders
+		} else if !layout.Folders.Empty() {
+			t.Errorf("width %d: the folders box is drawn in two-pane mode: %+v", tc.width, layout.Folders)
+		}
+
+		for name, box := range visible {
+			if box.Empty() {
+				t.Errorf("width %d (%v): the %s box is empty: %+v", tc.width, tc.mode, name, box)
+			}
+		}
+
+		view := loaded(t, tc.width, 20, sampleFolders(3), nil).View()
+		for _, title := range tc.titles {
+			if got := titleLine(view); !strings.Contains(got, title) {
+				t.Errorf("width %d: %q is missing from the title line: %q", tc.width, title, got)
+			}
+		}
+		for i, line := range strings.Split(view, "\n") {
+			if got := lipgloss.Width(line); got != tc.width {
+				t.Fatalf("width %d: line %d is %d cells: %q", tc.width, i, got, line)
+			}
+		}
+	}
+}
