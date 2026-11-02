@@ -25,6 +25,10 @@ type storeFlagsFunc func(acct config.Account, folder string, uids []imap.UID, ad
 // deleteMessagesFunc moves messages to the account's trash mailbox.
 type deleteMessagesFunc func(acct config.Account, folder string, uids []imap.UID) error
 
+// moveToRoleFunc files messages under the mailbox that serves a role (archive or
+// junk), returning the destination's name.
+type moveToRoleFunc func(acct config.Account, folder string, role mail.Role, uids []imap.UID) (string, error)
+
 // fetchComposeFunc reads one message as an editable draft.
 type fetchComposeFunc func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error)
 
@@ -61,6 +65,7 @@ type loaders struct {
 	body           loadBodyFunc
 	storeFlags     storeFlagsFunc
 	deleteMessages deleteMessagesFunc
+	moveToRole     moveToRoleFunc
 
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
@@ -90,6 +95,9 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		deleteMessages: func(acct config.Account, folder string, uids []imap.UID) error {
 			return manager.For(acct).Delete(folder, uids)
+		},
+		moveToRole: func(acct config.Account, folder string, role mail.Role, uids []imap.UID) (string, error) {
+			return manager.For(acct).MoveTo(folder, role, uids)
 		},
 		fetchCompose: func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error) {
 			return manager.For(acct).FetchCompose(folder, uid)
@@ -170,6 +178,17 @@ type flagsMsg struct {
 type deleteMsg struct {
 	account string
 	folder  string
+	uids    []imap.UID
+	err     error
+}
+
+// moveMsg carries the result of archiving or junking messages. dest is the mailbox
+// the session resolved, which the status bar names.
+type moveMsg struct {
+	account string
+	folder  string
+	role    mail.Role
+	dest    string
 	uids    []imap.UID
 	err     error
 }

@@ -33,6 +33,8 @@ const (
 	actionReply
 	actionReplyAll
 	actionForward
+	actionArchive
+	actionJunk
 	actionHelp
 )
 
@@ -63,6 +65,8 @@ var actionNames = map[action]string{
 	actionReply:             config.KeyReply,
 	actionReplyAll:          config.KeyReplyAll,
 	actionForward:           config.KeyForward,
+	actionArchive:           config.KeyArchive,
+	actionJunk:              config.KeyJunk,
 	actionHelp:              config.KeyHelp,
 }
 

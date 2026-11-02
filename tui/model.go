@@ -104,6 +104,7 @@ type Model struct {
 	loadBody         loadBodyFunc
 	storeFlags       storeFlagsFunc
 	deleteMessages   deleteMessagesFunc
+	moveToRole       moveToRoleFunc
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
 	appendSent       appendSentFunc
@@ -132,6 +133,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		loadBody:         load.body,
 		storeFlags:       load.storeFlags,
 		deleteMessages:   load.deleteMessages,
+		moveToRole:       load.moveToRole,
 		fetchCompose:     load.fetchCompose,
 		saveDraft:        load.saveDraft,
 		appendSent:       load.appendSent,
@@ -406,12 +408,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.removeDeleted(msg.uids)
+		m.removeMessages(msg.uids)
 
 		// Set the status after following the delete: opening the neighbouring
 		// message clears the status bar, and the move confirmation has to win.
 		next, cmd := m.followRows()
 		next.status = fmt.Sprintf("moved %s to trash", countLabel(len(msg.uids), "message"))
+
+		return next, cmd
+
+	case moveMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.status = moveStatus(msg)
+
+			return m, nil
+		}
+
+		m.removeMessages(msg.uids)
+
+		// Same ordering rule as delete: the confirmation is set after following the
+		// move, because opening the neighbour clears the status bar.
+		next, cmd := m.followRows()
+		next.status = fmt.Sprintf("moved %s to %s", countLabel(len(msg.uids), "message"), msg.dest)
 
 		return next, cmd
 
@@ -541,6 +563,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionDelete:
 		return m.beginDelete()
+
+	case actionArchive:
+		return m.beginArchive()
+
+	case actionJunk:
+		return m.beginJunk()
 
 	case actionFilter:
 		return m.openFilter()

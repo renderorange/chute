@@ -68,9 +68,11 @@ func closeHelp(t *testing.T, m Model, key string) Model {
 	return m
 }
 
-// TestHelpOpensAndListsTheContexts covers the issue's overlay and grouping.
+// TestHelpOpensAndListsTheContexts covers the issue's overlay and grouping. The
+// terminal is tall enough that the whole map renders at once; the 60x20 scroll test
+// covers the case where it does not fit.
 func TestHelpOpensAndListsTheContexts(t *testing.T) {
-	m := openHelp(t, sized(140, 50))
+	m := openHelp(t, sized(140, 60))
 	view := m.View()
 
 	for _, want := range []string{"keys", "global", "list", "reader", "composer", "modals"} {

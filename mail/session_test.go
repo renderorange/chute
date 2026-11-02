@@ -31,6 +31,11 @@ type fakeClient struct {
 	deleteUIDs   []imap.UID
 	deleteErr    error
 
+	moveFolder string
+	moveDest   string
+	moveUIDs   []imap.UID
+	moveErr    error
+
 	compose     *Compose
 	appendCalls []appendCall
 	appendErr   error
@@ -176,6 +181,21 @@ func (f *fakeClient) DeleteMessages(folder, trash string, uids []imap.UID) error
 
 	if f.deleteErr != nil {
 		return f.deleteErr
+	}
+
+	return f.err
+}
+
+// MoveToFolder records the destination a session resolved, so archive and junk
+// tests can prove the role lookup ran and one UID set reached the client.
+func (f *fakeClient) MoveToFolder(folder, dest string, uids []imap.UID) error {
+	f.requests++
+	f.moveFolder = folder
+	f.moveDest = dest
+	f.moveUIDs = uids
+
+	if f.moveErr != nil {
+		return f.moveErr
 	}
 
 	return f.err

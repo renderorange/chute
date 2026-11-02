@@ -320,7 +320,7 @@ func TestDeletedHighWaterMarkIsNotLowered(t *testing.T) {
 	m.messages = append(m.messages, sampleMessages(3)[2]) // UID 3
 	m.lastSeen[folderKey{account: "fastmail", folder: "INBOX"}] = 3
 
-	m.removeDeleted([]imap.UID{3})
+	m.removeMessages([]imap.UID{3})
 
 	var gotSince imap.UID
 	m.pollFolder = func(_ config.Account, _ string, since imap.UID) (mail.PollResult, error) {
