@@ -1,0 +1,124 @@
+name: CI
+
+# Runs on pull requests only. The release workflow runs the same gates on push to
+# main, so a merge cannot publish an untested binary and main does not run the
+# suite twice.
+on:
+  pull_request:
+    branches: [main]
+
+# Two pushes to the same PR queue two identical runs; keep the newest.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt wants to change these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
+      - name: Notify Slack
+        if: always()
+        uses: renderorange/.github/.github/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PIPELINE_WEBHOOK_URL }}
+        with:
+          template: job
+          job: test
+          conclusion: ${{ job.status }}
+          run-id: ${{ github.run_id }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+
+  lint:
+    name: Lint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # The version is pinned to what was run locally before this landed: the
+      # default linter set plus .golangci.yml is clean on this tree.
+      - name: Lint
+        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
+        with:
+          version: v2.15.0
+
+      - name: Notify Slack
+        if: always()
+        uses: renderorange/.github/.github/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PIPELINE_WEBHOOK_URL }}
+        with:
+          template: job
+          job: lint
+          conclusion: ${{ job.status }}
+          run-id: ${{ github.run_id }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+
+  build:
+    name: Build
+    runs-on: self-hosted
+    needs: test
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build
+        run: CGO_ENABLED=0 go build -ldflags "-X main.version=ci-${GITHUB_SHA::7}" -o chute .
+
+      # Proves the ldflag wiring the release depends on: a binary that cannot
+      # report its version cannot be told apart from a stale download.
+      - name: Smoke test the version
+        run: |
+          got="$(./chute -version)"
+          want="chute ci-${GITHUB_SHA::7}"
+          echo "$got"
+          if [ "$got" != "$want" ]; then
+            echo "version mismatch: want $want, got $got"
+            exit 1
+          fi
+
+      - name: Notify Slack
+        if: always()
+        uses: renderorange/.github/.github/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PIPELINE_WEBHOOK_URL }}
+        with:
+          template: job
+          job: build
+          conclusion: ${{ job.status }}
+          run-id: ${{ github.run_id }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}

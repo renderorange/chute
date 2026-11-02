@@ -143,8 +143,10 @@ func (s *scriptedServer) serve(conn net.Conn, authFail bool) {
 	writer := bufio.NewWriter(conn)
 
 	reply := func(line string) {
-		writer.WriteString(line + "\r\n")
-		writer.Flush()
+		// A failing test connection ends the conversation; the assertions that
+		// matter are on the commands received, so the write error is not reported.
+		_, _ = writer.WriteString(line + "\r\n")
+		_ = writer.Flush()
 	}
 
 	reply("220 test.invalid ESMTP ready")

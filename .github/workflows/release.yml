@@ -1,0 +1,165 @@
+name: Release
+
+# Notifications deliberately pass no pr-number/pr-title: this workflow runs on push
+# to main and on workflow_dispatch, where github.event.pull_request is absent and
+# both would always be empty. Re-add them only if a pull_request trigger is added.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt wants to change these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
+      - name: Notify Slack
+        if: always()
+        uses: renderorange/.github/.github/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PIPELINE_WEBHOOK_URL }}
+        with:
+          template: job
+          job: test
+          conclusion: ${{ job.status }}
+          run-id: ${{ github.run_id }}
+
+  # One version for every target, computed once: a timestamp per matrix leg would
+  # differ by seconds and the four binaries of one release must share a tag.
+  version:
+    name: Version
+    runs-on: self-hosted
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Generate version
+        id: version
+        run: echo "version=$(date -u +%Y-%m-%d-%H%M%S)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: self-hosted
+    needs: [test, version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          go build -ldflags "-s -w -X main.version=${{ needs.version.outputs.version }}" -o "chute-${{ matrix.goos }}-${{ matrix.goarch }}" .
+
+      # Only the linux/amd64 binary can run on the build runner. The other three
+      # are cross-compiled; their version string is checked in the release assets.
+      - name: Smoke test the version
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          got="$(./chute-${{ matrix.goos }}-${{ matrix.goarch }} -version)"
+          want="chute ${{ needs.version.outputs.version }}"
+          echo "$got"
+          if [ "$got" != "$want" ]; then
+            echo "version mismatch: want $want, got $got"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: chute-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: chute-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+
+      - name: Notify Slack
+        if: always()
+        uses: renderorange/.github/.github/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PIPELINE_WEBHOOK_URL }}
+        with:
+          template: job
+          job: build-${{ matrix.goos }}-${{ matrix.goarch }}
+          conclusion: ${{ job.status }}
+          run-id: ${{ github.run_id }}
+
+  release:
+    name: Release
+    runs-on: self-hosted
+    needs: [version, build]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: artifacts
+
+      - name: Flatten the assets
+        run: |
+          mkdir -p release
+          find artifacts -type f -name 'chute-*' -exec mv {} release/ \;
+          ls -la release/
+
+      - name: Create release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: chute v${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: release/chute-*
+
+      - name: Notify Slack
+        if: always()
+        uses: renderorange/.github/.github/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PIPELINE_WEBHOOK_URL }}
+        with:
+          template: job
+          job: release
+          conclusion: ${{ job.status }}
+          run-id: ${{ github.run_id }}

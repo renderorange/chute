@@ -1,0 +1,13 @@
+name: slack-pr-events
+
+# Posts PR lifecycle events (opened / merged / closed / assigned) to the develop
+# channel. The message shape and the webhook live in renderorange/.github; this
+# file is the thin caller documented in that repo's README.
+on:
+  pull_request:
+    types: [opened, closed, assigned]
+
+jobs:
+  notify:
+    uses: renderorange/.github/.github/workflows/pr-events.yml@main
+    secrets: inherit

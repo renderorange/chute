@@ -1,0 +1,18 @@
+version: "2"
+
+# golangci-lint for chute. The linter set is the default one (errcheck, govet,
+# ineffassign, staticcheck, unused); this file only narrows errcheck by one rule
+# so the first CI run is honest rather than red on cleanup noise.
+linters:
+  exclusions:
+    rules:
+      # Cleanup calls whose error cannot change the outcome: every finding is a
+      # Close or a Remove on a connection, command or file that is being torn
+      # down, and the primary error (if any) is already on its way out. Measured
+      # on 2026-11-02 with golangci-lint v2.15.0: 26 errcheck findings, 24 of
+      # them this idiom. errcheck stays fully enabled for everything else, and
+      # the two remaining findings were fixed in mail/smtpserver_test.go rather
+      # than excluded here.
+      - linters:
+          - errcheck
+        text: "Error return value of .*(Close|Remove)"
