@@ -93,6 +93,8 @@ func (m Model) selectAccount(index int) (tea.Model, tea.Cmd) {
 	m.openFolder = ""
 	m.messages = nil
 	m.rows = nil
+	m.filter = ""
+	m.filterOpen = false
 	m.messageCursor = 0
 	m.messageScroll = 0
 	m.msgLoading = false

@@ -82,6 +82,10 @@ type Model struct {
 	confirmKind   confirmKind
 	pendingDelete []imap.UID
 
+	// filter narrows the loaded list; filterOpen is the prompt that edits it.
+	filter     string
+	filterOpen bool
+
 	compose           *composer
 	composeDraftUID   imap.UID
 	composeDraftKnown bool
@@ -300,7 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.messages = sortNewestFirst(msg.messages)
-		m.rows = BuildRows(m.messages)
+		m.rows = m.visibleRows()
 		m.messageCursor = 0
 		m.messageScroll = 0
 		m.visualAnchor = noVisualAnchor
@@ -390,7 +394,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Set the status after following the delete: opening the neighbouring
 		// message clears the status bar, and the move confirmation has to win.
-		next, cmd := m.followDeleted()
+		next, cmd := m.followRows()
 		next.status = fmt.Sprintf("moved %s to trash", countLabel(len(msg.uids), "message"))
 
 		return next, cmd
@@ -419,6 +423,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.compose != nil {
 		return m.handleComposeKey(msg)
 	}
+	if m.filterOpen {
+		return m.handleFilterKey(msg)
+	}
 
 	switch m.keys.resolve(msg.String()) {
 	case actionQuit, actionForceQuit:
@@ -430,6 +437,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionBack:
 		if m.visualActive() {
 			m.visualAnchor = noVisualAnchor
+			break
+		}
+		// esc means "back" everywhere else; on a filtered message list the way back
+		// is to the whole folder, so the same key clears the filter.
+		if m.filter != "" && m.focus == focusMessages {
+			m.filter = ""
+			m.applyFilter()
+			m.status = ""
 			break
 		}
 		switch {
@@ -461,6 +476,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.messages = nil
 		m.rows = nil
 		m.openFolder = ""
+		m.filter = ""
+		m.filterOpen = false
 		m.msgLoading = false
 		m.openUnseen = 0
 		m.bodies = make(map[bodyKey]*mail.Body)
@@ -497,6 +514,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionDelete:
 		return m.beginDelete()
+
+	case actionFilter:
+		return m.openFilter()
 
 	case actionVisualRange:
 		m.toggleVisual()
@@ -578,6 +598,7 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 	}
 
 	m.openFolder = folder.Name
+	m.filter = ""
 	m.messages = nil
 	m.rows = nil
 	m.messageCursor = 0
@@ -777,6 +798,10 @@ func (m Model) View() string {
 	case m.foldersOpen:
 		if overlay := m.renderFoldersOverlay(ContentWidth(m.width), ContentHeight(m.height)); overlay != "" {
 			panels = overlay
+		}
+	case m.filterOpen:
+		if modal := m.renderFilterModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
 		}
 	}
 

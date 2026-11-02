@@ -128,6 +128,8 @@ func packHints(b bindings, hints []footerHint, width int) string {
 // packHints is a safety net rather than an invitation to fill it.
 func (m Model) footerHints() []footerHint {
 	switch {
+	case m.filterOpen:
+		return []footerHint{hint(actionOpen, "keep"), hint(actionBack, "clear")}
 	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
 		return []footerHint{hint(actionOpen, "discard"), hint(actionBack, "keep editing")}
 	case m.confirmOpen:
@@ -189,6 +191,13 @@ func (m Model) footerHints() []footerHint {
 		hint(actionToggleRead, "read"),
 		hint(actionOpen, "open"),
 		hint(actionQuit, "quit"),
+	}
+
+	// A filtered list leads with the query, because a narrowed list that does not
+	// say why looks like missing mail. The clear hint sits next to it: the two only
+	// make sense together, and both outrank the keys that save a keystroke.
+	if m.focus == focusMessages && m.filter != "" {
+		hints = append([]footerHint{literalHint("filter", m.filter), hint(actionBack, "clear")}, hints...)
 	}
 
 	if overlay, ok := m.foldersOverlayHint(); ok {

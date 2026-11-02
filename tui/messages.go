@@ -93,6 +93,10 @@ func (m Model) messageLines(rows, width int) []string {
 	case m.openFolder == "":
 		return []string{MutedStyle.Render("open a folder with enter")}
 	case len(m.rows) == 0:
+		if query := strings.TrimSpace(m.filter); query != "" {
+			return []string{MutedStyle.Render(Truncate(fmt.Sprintf("no messages match %q", query), width))}
+		}
+
 		return []string{MutedStyle.Render("no messages")}
 	}
 
@@ -176,11 +180,12 @@ func (m Model) selectedMessage() (mail.Message, bool) {
 
 // rebuildRows re-derives the list after messages changed and keeps the cursor on
 // the same message, identified by UID. Re-parenting and reordering must not
-// silently move the selection to a different conversation.
+// silently move the selection to a different conversation. The active filter is
+// applied here too, so a flag change or a delete cannot drop it.
 func (m *Model) rebuildRows() {
 	keep, hasCursor := m.selectedMessage()
 
-	m.rows = BuildRows(m.messages)
+	m.rows = m.visibleRows()
 
 	if hasCursor {
 		for i, row := range m.rows {
