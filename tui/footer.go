@@ -128,6 +128,8 @@ func packHints(b bindings, hints []footerHint, width int) string {
 // packHints is a safety net rather than an invitation to fill it.
 func (m Model) footerHints() []footerHint {
 	switch {
+	case m.helpOpen:
+		return []footerHint{hint(actionBack, "close"), hintPair(actionUp, actionDown, "scroll")}
 	case m.filterOpen:
 		return []footerHint{hint(actionOpen, "keep"), hint(actionBack, "clear")}
 	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
