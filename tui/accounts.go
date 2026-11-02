@@ -113,6 +113,10 @@ func (m Model) selectAccount(index int) (tea.Model, tea.Cmd) {
 
 	m.started = false
 
+	// The switch is written now, not at exit: a killed terminal must not lose it. The
+	// new account's own folder entry is left alone, so it reopens where it was.
+	m.rememberSelection()
+
 	m.focus = focusFolders
 	m.clampFocus()
 
