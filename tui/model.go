@@ -86,6 +86,10 @@ type Model struct {
 	filter     string
 	filterOpen bool
 
+	// helpOpen is the keymap overlay; helpScroll is its first visible body line.
+	helpOpen   bool
+	helpScroll int
+
 	// selection is the last account and folder, remembered across restarts, and
 	// saveState persists it. A nil writer means this model keeps no state.
 	selection config.State
@@ -141,7 +145,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		markSeenOnLoad:   make(map[bodyKey]bool),
 		lastSeen:         make(map[folderKey]imap.UID),
 		visualAnchor:     noVisualAnchor,
-		keys:             defaultBindings(),
+		keys:             bindingsFromConfig(cfg.KeyBindings()),
 	}
 
 	for i := range cfg.Accounts {
@@ -248,6 +252,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clampFolderScroll()
 		m.clampMessageScroll()
 		m.clampReaderScroll()
+		m.clampHelpScroll()
 
 		return m, nil
 
@@ -419,6 +424,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey applies a single keypress.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Help is checked first: it can be opened from the main view, and closing it must
+	// not also run the action the same key has outside the overlay (esc is "back").
+	if m.helpOpen {
+		return m.handleHelpKey(msg)
+	}
 	if m.accountsOpen {
 		return m.handleAccountsKey(msg)
 	}
@@ -468,6 +478,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionAccount:
 		return m.openAccounts()
+
+	case actionHelp:
+		m.helpOpen = true
+		m.helpScroll = 0
+
+		return m, nil
 
 	case actionCompose:
 		return m.beginCompose()
@@ -805,6 +821,10 @@ func (m Model) View() string {
 	layout := m.layout()
 	panels := m.renderPanels(layout)
 	switch {
+	case m.helpOpen:
+		if modal := m.renderHelpOverlay(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
 	case m.confirmOpen:
 		if modal := m.renderConfirmModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal

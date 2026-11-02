@@ -27,6 +27,11 @@ type Config struct {
 	General  General   `toml:"general"`
 	Layout   Layout    `toml:"layout"`
 	Accounts []Account `toml:"accounts"`
+
+	// Keys overrides the shipped keymap per action: [keys] with reload = ["ctrl+r"].
+	// The names and their defaults live in keys.go; validate rejects an unknown action,
+	// an empty list and any key bound twice.
+	Keys map[string][]string `toml:"keys"`
 }
 
 // General holds settings that apply to every account.
@@ -245,6 +250,10 @@ func (c *Config) validate() error {
 	}
 
 	if err := c.Layout.validate(); err != nil {
+		return err
+	}
+
+	if err := c.validateKeys(); err != nil {
 		return err
 	}
 
