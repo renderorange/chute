@@ -37,6 +37,9 @@ type sendMessageFunc func(acct config.Account, msg []byte) error
 // draftsFolderFunc resolves the account's drafts mailbox from its last listing.
 type draftsFolderFunc func(acct config.Account) (string, bool)
 
+// unseenFunc counts the unseen messages in one folder of one account.
+type unseenFunc func(acct config.Account, folder string) (uint32, error)
+
 // loaders groups the background loaders the model calls.
 type loaders struct {
 	folders        loadFoldersFunc
@@ -50,6 +53,7 @@ type loaders struct {
 	appendSent       appendSentFunc
 	sendMessage      sendMessageFunc
 	findDraftsFolder draftsFolderFunc
+	countUnseen      unseenFunc
 }
 
 // sessionLoaders binds every loader to one persistent session per account, so
@@ -90,6 +94,9 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		findDraftsFolder: func(acct config.Account) (string, bool) {
 			return manager.For(acct).DraftsFolder()
+		},
+		countUnseen: func(acct config.Account, folder string) (uint32, error) {
+			return manager.For(acct).Unseen(folder)
 		},
 	}
 }
@@ -142,5 +149,13 @@ type deleteMsg struct {
 	account string
 	folder  string
 	uids    []imap.UID
+	err     error
+}
+
+// unseenMsg carries one account's unread count for the account selector. Each
+// account reports separately so an unreachable server delays only its own row.
+type unseenMsg struct {
+	account string
+	count   uint32
 	err     error
 }

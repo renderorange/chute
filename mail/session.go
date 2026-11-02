@@ -32,6 +32,7 @@ type sessionClient interface {
 	Append(folder string, flags []imap.Flag, msg []byte) (imap.UID, bool, error)
 	StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
 	DeleteMessages(folder, trash string, uids []imap.UID) error
+	Unseen(folder string) (uint32, error)
 	Close() error
 }
 
@@ -187,6 +188,26 @@ func (s *Session) FetchBody(folder string, uid imap.UID) (*Body, error) {
 	}
 
 	return body, nil
+}
+
+// Unseen counts the unread messages in one folder over the persistent
+// connection. The account selector calls it once per account.
+func (s *Session) Unseen(folder string) (uint32, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return 0, err
+	}
+
+	count, err := client.Unseen(folder)
+	if err != nil {
+		s.resetLocked()
+		return 0, err
+	}
+
+	return count, nil
 }
 
 // StoreFlags adds or removes flags on every listed message in one command.

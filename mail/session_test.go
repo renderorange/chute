@@ -35,6 +35,10 @@ type fakeClient struct {
 	appendCalls []appendCall
 	appendErr   error
 	appendUID   imap.UID
+
+	unseen     uint32
+	unseenErr  error
+	unseenSeen []string
 }
 
 // appendCall records one APPEND so a test can assert the folder, the flags and the
@@ -107,6 +111,22 @@ func (f *fakeClient) Append(folder string, flags []imap.Flag, msg []byte) (imap.
 	}
 
 	return f.appendUID, f.appendUID != 0, nil
+}
+
+// Unseen records the folder it counted so a test can prove the session asked for
+// the folder the caller named.
+func (f *fakeClient) Unseen(folder string) (uint32, error) {
+	f.requests++
+	f.unseenSeen = append(f.unseenSeen, folder)
+
+	if f.unseenErr != nil {
+		return 0, f.unseenErr
+	}
+	if f.err != nil {
+		return 0, f.err
+	}
+
+	return f.unseen, nil
 }
 
 // DeleteMessages records the resolved trash mailbox so session tests can prove

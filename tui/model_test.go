@@ -199,18 +199,6 @@ func TestSingleModeShowsFocusedPanel(t *testing.T) {
 	}
 }
 
-func TestAccountKeySetsStatus(t *testing.T) {
-	next, _ := sized(140, 40).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	if got := next.(Model).status; got == "" {
-		t.Error("a did not set a status message")
-	}
-
-	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if got := next.(Model).status; got != "" {
-		t.Errorf("esc left status = %q, want empty", got)
-	}
-}
-
 func TestTruncate(t *testing.T) {
 	tests := []struct {
 		in    string

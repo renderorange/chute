@@ -68,6 +68,11 @@ type Model struct {
 	foldersOpen         bool
 	folderOverlayCursor int
 
+	accountsOpen  bool
+	accountCursor int
+	unseen        map[string]uint32
+	unseenErrs    map[string]error
+
 	confirmOpen   bool
 	confirmKind   confirmKind
 	pendingDelete []imap.UID
@@ -86,6 +91,7 @@ type Model struct {
 	appendSent       appendSentFunc
 	sendMessage      sendMessageFunc
 	findDraftsFolder draftsFolderFunc
+	countUnseen      unseenFunc
 
 	keys bindings
 }
@@ -111,6 +117,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		appendSent:       load.appendSent,
 		sendMessage:      load.sendMessage,
 		findDraftsFolder: load.findDraftsFolder,
+		countUnseen:      load.countUnseen,
 		bodies:           make(map[bodyKey]*mail.Body),
 		markSeenOnLoad:   make(map[bodyKey]bool),
 		visualAnchor:     noVisualAnchor,
@@ -182,6 +189,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case draftSavedMsg:
 		m.applyDraftSaved(msg)
+
+		return m, nil
+
+	case unseenMsg:
+		m.applyUnseen(msg)
 
 		return m, nil
 
@@ -361,6 +373,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey applies a single keypress.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.accountsOpen {
+		return m.handleAccountsKey(msg)
+	}
 	if m.confirmOpen {
 		return m.handleConfirmKey(msg)
 	}
@@ -395,7 +410,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 
 	case actionAccount:
-		m.status = "account selector arrives in M6"
+		return m.openAccounts()
 
 	case actionCompose:
 		return m.beginCompose()
@@ -710,6 +725,10 @@ func (m Model) View() string {
 		if modal := m.renderAttachmentModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal
 		}
+	case m.accountsOpen:
+		if modal := m.renderAccountsModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
 	case m.foldersOpen:
 		if overlay := m.renderFoldersOverlay(ContentWidth(m.width), ContentHeight(m.height)); overlay != "" {
 			panels = overlay
@@ -764,7 +783,7 @@ func (m Model) renderPanels(layout Layout) string {
 
 // renderFooter shows the keys that work right now.
 func (m Model) renderFooter() string {
-	hints := "q:quit  j/k:move  enter:open  esc:back  \\:folders  m:read  f:flag  d:delete  v:range  s:attach  r:reload"
+	hints := "q:quit  j/k:move  enter:open  esc:back  \\:folders  m:read  f:flag  d:delete  v:range  s:attach  a:account  r:reload"
 
 	switch {
 	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
@@ -773,6 +792,8 @@ func (m Model) renderFooter() string {
 		hints = "enter:delete  esc:cancel"
 	case m.compose != nil:
 		hints = "ctrl+s:save  ctrl+d:send  tab:field  esc:cancel"
+	case m.accountsOpen:
+		hints = "enter:switch  esc:close"
 	case m.attachOpen:
 		hints = "j/k:choose  enter:save  esc:close"
 	case m.foldersOpen:
