@@ -595,7 +595,7 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 
 // openSelectedMessage loads the body for the message under the cursor. The
 // fetch is explicit so moving the cursor does not reconnect for every row, and
-// focus stays on the list so j/k keeps navigating.
+// focus stays on the list so the arrows keep navigating.
 func (m Model) openSelectedMessage() (tea.Model, tea.Cmd) {
 	msg, ok := m.selectedMessage()
 	if !ok || m.openFolder == "" {

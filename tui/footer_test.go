@@ -225,12 +225,12 @@ func TestFooterModalContexts(t *testing.T) {
 	want := map[string][]string{
 		"reader":          {"n:next", "p:prev", "q:quit"},
 		"reader narrow":   {"n:next", "p:prev"},
-		"visual range":    {"j/k:extend", "esc:cancel", "d:delete"},
+		"visual range":    {"up/down:extend", "esc:cancel", "d:delete"},
 		"confirm delete":  {"enter:delete", "esc:cancel"},
 		"confirm discard": {"enter:discard", "esc:keep editing"},
-		"accounts":        {"j/k:choose", "enter:switch", "esc:close"},
-		"attachments":     {"j/k:choose", "enter:save", "esc:close"},
-		"folders overlay": {"j/k:choose", "enter:open", "esc:close"},
+		"accounts":        {"up/down:choose", "enter:switch", "esc:close"},
+		"attachments":     {"up/down:choose", "enter:save", "esc:close"},
+		"folders overlay": {"up/down:choose", "enter:open", "esc:close"},
 	}
 
 	for _, tc := range footerCases(t) {
@@ -248,6 +248,22 @@ func TestFooterModalContexts(t *testing.T) {
 		if tc.name != "reader narrow" {
 			if got, limit := lipgloss.Width(footer), ContentWidth(tc.m.width); got > limit {
 				t.Errorf("%s: footer is %d cells, want at most %d: %q", tc.name, got, limit, footer)
+			}
+		}
+	}
+}
+
+// TestNoHintNamesJOrK is the acceptance criterion the footer makes automatic:
+// every hint is derived from the binding table, so removing the binding removes
+// the hint. Stated as a test so a future literal hint cannot reintroduce j or k.
+func TestNoHintNamesJOrK(t *testing.T) {
+	for _, tc := range footerCases(t) {
+		for _, hint := range strings.Split(tc.m.renderFooter(), " ") {
+			key := hintKeyPart(hint)
+			for _, part := range strings.Split(key, "/") {
+				if part == "j" || part == "k" {
+					t.Errorf("%s: footer names %q, which is no longer bound: %q", tc.name, part, hint)
+				}
 			}
 		}
 	}

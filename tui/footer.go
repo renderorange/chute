@@ -27,7 +27,7 @@ func hint(act action, label string) footerHint {
 }
 
 // hintPair builds a hint for two bound actions that share a label, such as the
-// two movement keys, rendered as "j/k:move".
+// two movement keys, rendered as "up/down:move".
 func hintPair(first, second action, label string) footerHint {
 	return footerHint{actions: []action{first, second}, label: label}
 }
@@ -38,8 +38,9 @@ func literalHint(key, label string) footerHint {
 }
 
 // primaryKey returns the key the footer should advertise for an action: the
-// first single-cell key, so "up"/"down" show as "k"/"j" and the footer keeps its
-// cell budget. A key that is not a single cell ("esc", "ctrl+r") is used as is.
+// shortest key, so an action bound to both a letter and an arrow shows the letter
+// and the footer keeps its cell budget. A key that is not a single cell ("esc",
+// "up", "ctrl+r") is used as is.
 func primaryKey(b bindings, act action) string {
 	keys := b[act]
 
@@ -140,19 +141,19 @@ func (m Model) footerHints() []footerHint {
 		}
 	case m.accountsOpen:
 		return []footerHint{
-			hintPair(actionDown, actionUp, "choose"),
+			hintPair(actionUp, actionDown, "choose"),
 			hint(actionOpen, "switch"),
 			hint(actionBack, "close"),
 		}
 	case m.attachOpen:
 		return []footerHint{
-			hintPair(actionDown, actionUp, "choose"),
+			hintPair(actionUp, actionDown, "choose"),
 			hint(actionOpen, "save"),
 			hint(actionBack, "close"),
 		}
 	case m.foldersOpen:
 		return []footerHint{
-			hintPair(actionDown, actionUp, "choose"),
+			hintPair(actionUp, actionDown, "choose"),
 			hint(actionOpen, "open"),
 			hint(actionBack, "close"),
 		}
@@ -163,7 +164,7 @@ func (m Model) footerHints() []footerHint {
 			hint(actionToggleRead, "read"),
 			hint(actionQuit, "quit"),
 			hint(actionBack, "cancel"),
-			hintPair(actionDown, actionUp, "extend"),
+			hintPair(actionUp, actionDown, "extend"),
 		}
 	case m.focus == focusReader:
 		hints := []footerHint{

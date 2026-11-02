@@ -119,7 +119,7 @@ func TestReaderShowsSelectedMessage(t *testing.T) {
 		t.Errorf("reader missing the selected subject: %q", reader)
 	}
 
-	next, _ := m.Update(keyMsg("j"))
+	next, _ := m.Update(namedKey("down"))
 	m = next.(Model)
 
 	if reader := strings.Join(m.readerLines(m.readerInnerWidth()), "\n"); !strings.Contains(reader, "subject 01") {
@@ -131,7 +131,7 @@ func TestMessageCursorClamps(t *testing.T) {
 	m := openInbox(t, withInbox(t, sampleMessages(4), nil))
 
 	for i := 0; i < 10; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 	if got, want := m.messageCursor, 3; got != want {
@@ -156,7 +156,7 @@ func TestMessageScrollFollowsCursor(t *testing.T) {
 	m = openInbox(t, m)
 
 	for i := 0; i < 20; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 

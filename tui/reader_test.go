@@ -110,7 +110,7 @@ func TestReaderShowsThread(t *testing.T) {
 	m := loadedBody(t, []mail.Message{parent, reply, reply2}, &mail.Body{Text: "the reply body"})
 
 	// The cursor starts on the first row, so move it to the middle message.
-	next, _ := m.Update(keyMsg("j"))
+	next, _ := m.Update(namedKey("down"))
 	m = next.(Model)
 
 	// Cache only the expanded message's body.
@@ -145,7 +145,7 @@ func TestReaderScrollsBody(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 	if m.readerScroll == 0 {
@@ -153,7 +153,7 @@ func TestReaderScrollsBody(t *testing.T) {
 	}
 
 	scrolled := m.readerScroll
-	next, _ := m.Update(keyMsg("k"))
+	next, _ := m.Update(namedKey("up"))
 	m = next.(Model)
 	if m.readerScroll != scrolled-1 {
 		t.Errorf("scroll after k = %d, want %d", m.readerScroll, scrolled-1)
@@ -175,7 +175,7 @@ func TestMovingMessageCursorResetsReaderScroll(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		next, _ := m.Update(keyMsg("j"))
+		next, _ := m.Update(namedKey("down"))
 		m = next.(Model)
 	}
 	if m.readerScroll == 0 {
@@ -183,7 +183,7 @@ func TestMovingMessageCursorResetsReaderScroll(t *testing.T) {
 	}
 
 	m.focus = focusMessages
-	next, _ := m.Update(keyMsg("j"))
+	next, _ := m.Update(namedKey("down"))
 	m = next.(Model)
 
 	if m.readerScroll != 0 {
@@ -268,13 +268,13 @@ func TestAttachmentModalMovesCursor(t *testing.T) {
 	next, _ := m.Update(keyMsg("s"))
 	m = next.(Model)
 
-	next, _ = m.Update(keyMsg("j"))
+	next, _ = m.Update(namedKey("down"))
 	m = next.(Model)
 	if got, want := m.attachCursor, 1; got != want {
 		t.Errorf("attachment cursor = %d, want %d", got, want)
 	}
 
-	next, _ = m.Update(keyMsg("j"))
+	next, _ = m.Update(namedKey("down"))
 	m = next.(Model)
 	if got, want := m.attachCursor, 1; got != want {
 		t.Errorf("attachment cursor past the end = %d, want %d", got, want)
@@ -335,7 +335,7 @@ func TestAttachmentModalSavesEachAttachment(t *testing.T) {
 	// Open the picker again, choose the second attachment, and save it.
 	next, _ = m.Update(keyMsg("s"))
 	m = next.(Model)
-	next, _ = m.Update(keyMsg("j"))
+	next, _ = m.Update(namedKey("down"))
 	m = next.(Model)
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
