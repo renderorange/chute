@@ -18,10 +18,12 @@ const (
 	confirmDiscardDraft
 )
 
-// triageReady reports whether the message list owns the selection. Without this
-// guard, pressing m in the folder list would silently mark mail read.
+// triageReady reports whether a message panel owns the selection. Without this
+// guard, pressing m in the folder list would silently mark mail read. The reading
+// pane counts too: it expands the message under the same cursor, and its footer
+// advertises d, m and f, so those keys have to work there (#37).
 func (m Model) triageReady() bool {
-	return m.focus == focusMessages
+	return m.focus == focusMessages || m.focus == focusReader
 }
 
 // beginDelete asks before moving the selection to Trash. Nothing reaches the
@@ -116,9 +118,45 @@ func (m *Model) removeDeleted(uids []imap.UID) {
 		}
 	}
 	m.messages = kept
+	m.forgetBodies(uids)
 	m.rebuildRows()
 	m.visualAnchor = noVisualAnchor
 	m.openUnseen = countUnread(m.messages)
+}
+
+// forgetBodies drops the cached state of messages the server confirmed gone. The
+// body of a deleted message is dead weight for the rest of the session, and a
+// pending mark-as-read must not outlive the message it was queued for.
+func (m *Model) forgetBodies(uids []imap.UID) {
+	for _, uid := range uids {
+		key := bodyKey{account: m.accountName(), folder: m.openFolder, uid: uid}
+		delete(m.bodies, key)
+		delete(m.markSeenOnLoad, key)
+	}
+}
+
+// followDeleted re-opens the message the cursor landed on, so deleting from the
+// reading pane moves it to the neighbour instead of leaving an empty selection.
+// With nothing left to read, focus goes back to the message list.
+func (m Model) followDeleted() (Model, tea.Cmd) {
+	if m.focus != focusReader {
+		return m, nil
+	}
+
+	m.readerScroll = 0
+
+	if len(m.rows) == 0 {
+		m.focus = focusMessages
+
+		return m, nil
+	}
+
+	next, cmd := m.openSelectedMessage()
+
+	// openSelectedMessage answers with the model it was given on every path; the
+	// assertion is what lets this return a Model and keep the caller able to set
+	// its status after the load clears it.
+	return next.(Model), cmd
 }
 
 // renderConfirmModal centres the delete confirmation in the content area. The
