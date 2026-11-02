@@ -47,11 +47,12 @@ const (
 )
 
 // Column clamps.
+// Minimum and maximum panel widths, in content columns. The message list has a minimum and
+// no maximum: it grows with the terminal, and a [layout] section can set it exactly.
 const (
 	MinFoldersWidth  = 24
 	MaxFoldersWidth  = 28
 	MinMessagesWidth = 40
-	MaxMessagesWidth = 48
 	MinReaderWidth   = 36
 )
 

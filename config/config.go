@@ -25,6 +25,7 @@ const privateMode = 0o600
 // Config is the whole configuration file.
 type Config struct {
 	General  General   `toml:"general"`
+	Layout   Layout    `toml:"layout"`
 	Accounts []Account `toml:"accounts"`
 }
 
@@ -56,6 +57,62 @@ const (
 	ReplyPositionTop    = "top"
 	ReplyPositionBottom = "bottom"
 )
+
+// LayoutMaxPercent is the largest share of the content width one pane may take. The reader
+// needs the rest, so 100 is not a legal setting.
+const LayoutMaxPercent = 90
+
+// Layout sizes the three panels. Every field's zero value means automatic: the TUI applies
+// its built-in rules. A non-zero width wins over the matching percentage for that pane.
+//
+// A width that is too small for the terminal is not a load error, because the same file is
+// used at 60, 105 and 200 columns; the TUI clamps it to the pane's minimum.
+type Layout struct {
+	// FoldersPercent sizes the folder pane as a percentage of the content width.
+	FoldersPercent int `toml:"folders_percent"`
+
+	// MessagesPercent sizes the message list as a percentage of the content width.
+	MessagesPercent int `toml:"messages_percent"`
+
+	// FoldersWidth and MessagesWidth are absolute column counts.
+	FoldersWidth  int `toml:"folders_width"`
+	MessagesWidth int `toml:"messages_width"`
+}
+
+// validate checks the ranges that do not depend on the terminal size.
+func (l Layout) validate() error {
+	percents := []struct {
+		name  string
+		value int
+	}{
+		{"folders_percent", l.FoldersPercent},
+		{"messages_percent", l.MessagesPercent},
+	}
+
+	for _, p := range percents {
+		if p.value < 0 || p.value > LayoutMaxPercent {
+			return fmt.Errorf("config: layout.%s is %d, want 0..%d (0 means automatic)",
+				p.name, p.value, LayoutMaxPercent)
+		}
+	}
+
+	widths := []struct {
+		name  string
+		value int
+	}{
+		{"folders_width", l.FoldersWidth},
+		{"messages_width", l.MessagesWidth},
+	}
+
+	for _, w := range widths {
+		if w.value < 0 {
+			return fmt.Errorf("config: layout.%s is %d, want a non-negative number of columns",
+				w.name, w.value)
+		}
+	}
+
+	return nil
+}
 
 // Account is one mail account.
 type Account struct {
@@ -185,6 +242,10 @@ func (c *Config) validate() error {
 	default:
 		return fmt.Errorf("config: general.reply_position is %q, want %q or %q",
 			c.General.ReplyPosition, ReplyPositionTop, ReplyPositionBottom)
+	}
+
+	if err := c.Layout.validate(); err != nil {
+		return err
 	}
 
 	seen := make(map[string]bool, len(c.Accounts))

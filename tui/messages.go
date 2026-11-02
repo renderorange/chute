@@ -32,7 +32,7 @@ func (m Model) messageRows() int {
 		return 1
 	}
 
-	layout := ComputeLayout(m.width, m.height)
+	layout := m.layout()
 	box := layout.Messages
 	if box.Empty() {
 		box = layout.Reader

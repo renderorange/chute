@@ -431,7 +431,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.focus == focusReader:
 			m.focus = focusMessages
-		case m.focus == focusMessages && ComputeLayout(m.width, m.height).Mode == ModeSingle:
+		case m.focus == focusMessages && m.layout().Mode == ModeSingle:
 			m.focus = focusFolders
 		}
 		m.status = ""
@@ -682,7 +682,7 @@ func (m Model) loadBodyCmd(key bodyKey) tea.Cmd {
 
 // clampFocus moves focus off a panel the current mode does not draw.
 func (m *Model) clampFocus() {
-	switch ComputeLayout(m.width, m.height).Mode {
+	switch m.layout().Mode {
 	case ModeThree, ModeSingle:
 		return
 	}
@@ -695,7 +695,7 @@ func (m *Model) clampFocus() {
 
 // nextFocus advances focus to the next panel visible in the current mode.
 func (m Model) nextFocus() panelFocus {
-	switch ComputeLayout(m.width, m.height).Mode {
+	switch m.layout().Mode {
 	case ModeThree:
 		switch m.focus {
 		case focusFolders:
@@ -737,13 +737,25 @@ func panelTitle(focus panelFocus) string {
 	}
 }
 
+// layout sizes the panels for the current terminal and the configured widths. Every pane
+// is sized from this one function, so a configured width cannot reach one panel and miss
+// another.
+func (m Model) layout() Layout {
+	return ComputeLayoutWith(m.width, m.height, Widths{
+		FoldersPercent:  m.cfg.Layout.FoldersPercent,
+		MessagesPercent: m.cfg.Layout.MessagesPercent,
+		FoldersWidth:    m.cfg.Layout.FoldersWidth,
+		MessagesWidth:   m.cfg.Layout.MessagesWidth,
+	})
+}
+
 // View renders the whole interface.
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "chute " + m.version
 	}
 
-	layout := ComputeLayout(m.width, m.height)
+	layout := m.layout()
 	panels := m.renderPanels(layout)
 	switch {
 	case m.confirmOpen:
