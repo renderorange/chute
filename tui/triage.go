@@ -196,4 +196,5 @@ func (m *Model) applyFlags(uids []imap.UID, flags []imap.Flag, on bool) {
 	// Rows carry a copy of each message, so re-derive them or the list would keep
 	// showing the old flag state.
 	m.rebuildRows()
+	m.openUnseen = countUnread(m.messages)
 }

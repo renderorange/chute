@@ -96,6 +96,7 @@ func (m Model) selectAccount(index int) (tea.Model, tea.Cmd) {
 	m.messageCursor = 0
 	m.messageScroll = 0
 	m.msgLoading = false
+	m.openUnseen = 0
 
 	m.bodies = make(map[bodyKey]*mail.Body)
 	m.markSeenOnLoad = make(map[bodyKey]bool)

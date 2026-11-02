@@ -39,6 +39,12 @@ type fakeClient struct {
 	unseen     uint32
 	unseenErr  error
 	unseenSeen []string
+
+	poll      PollResult
+	pollErr   error
+	pollSince imap.UID
+	uids      []imap.UID
+	uidsErr   error
 }
 
 // appendCall records one APPEND so a test can assert the folder, the flags and the
@@ -127,6 +133,37 @@ func (f *fakeClient) Unseen(folder string) (uint32, error) {
 	}
 
 	return f.unseen, nil
+}
+
+// Poll returns the canned result and records the high-water mark it was given.
+func (f *fakeClient) Poll(folder string, since imap.UID) (PollResult, error) {
+	f.requests++
+	f.folder = folder
+	f.pollSince = since
+
+	if f.pollErr != nil {
+		return PollResult{}, f.pollErr
+	}
+	if f.err != nil {
+		return PollResult{}, f.err
+	}
+
+	return f.poll, nil
+}
+
+// UIDs returns the canned UID list.
+func (f *fakeClient) UIDs(folder string) ([]imap.UID, error) {
+	f.requests++
+	f.folder = folder
+
+	if f.uidsErr != nil {
+		return nil, f.uidsErr
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.uids, nil
 }
 
 // DeleteMessages records the resolved trash mailbox so session tests can prove

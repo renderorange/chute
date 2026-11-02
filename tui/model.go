@@ -73,6 +73,11 @@ type Model struct {
 	unseen        map[string]uint32
 	unseenErrs    map[string]error
 
+	lastSeen   map[folderKey]imap.UID
+	openUnseen uint32
+	polling    bool
+	clock      tickFunc
+
 	confirmOpen   bool
 	confirmKind   confirmKind
 	pendingDelete []imap.UID
@@ -92,6 +97,8 @@ type Model struct {
 	sendMessage      sendMessageFunc
 	findDraftsFolder draftsFolderFunc
 	countUnseen      unseenFunc
+	pollFolder       pollFunc
+	countUIDs        uidsFunc
 
 	keys bindings
 }
@@ -118,8 +125,12 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		sendMessage:      load.sendMessage,
 		findDraftsFolder: load.findDraftsFolder,
 		countUnseen:      load.countUnseen,
+		pollFolder:       load.pollFolder,
+		countUIDs:        load.countUIDs,
+		clock:            tea.Tick,
 		bodies:           make(map[bodyKey]*mail.Body),
 		markSeenOnLoad:   make(map[bodyKey]bool),
+		lastSeen:         make(map[folderKey]imap.UID),
 		visualAnchor:     noVisualAnchor,
 		keys:             defaultBindings(),
 	}
@@ -143,9 +154,9 @@ func (m Model) Close() error {
 	return m.sessions.Close()
 }
 
-// Init starts the first folder load.
+// Init starts the first folder load and arms the new-mail poll.
 func (m Model) Init() tea.Cmd {
-	return m.reloadCmd()
+	return tea.Batch(m.reloadCmd(), m.schedulePoll())
 }
 
 // reloadCmd loads folders for the active account in the background.
@@ -194,6 +205,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case unseenMsg:
 		m.applyUnseen(msg)
+
+		return m, nil
+
+	case pollTickMsg:
+		cmd := m.pollCmd()
+		m.polling = cmd != nil
+
+		return m, tea.Batch(cmd, m.schedulePoll())
+
+	case pollMsg:
+		return m, m.applyPoll(msg)
+
+	case uidsMsg:
+		m.applyUIDs(msg)
 
 		return m, nil
 
@@ -280,6 +305,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.messageScroll = 0
 		m.visualAnchor = noVisualAnchor
 		m.clampMessageScroll()
+		m.openUnseen = countUnread(m.messages)
+		m.advanceLastSeen(folderKey{account: msg.account, folder: msg.folder})
 
 		return m, nil
 
@@ -431,6 +458,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rows = nil
 		m.openFolder = ""
 		m.msgLoading = false
+		m.openUnseen = 0
 		m.bodies = make(map[bodyKey]*mail.Body)
 		m.markSeenOnLoad = make(map[bodyKey]bool)
 		m.loadingBody = bodyKey{}
@@ -551,6 +579,7 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 	m.messageCursor = 0
 	m.messageScroll = 0
 	m.msgLoading = true
+	m.openUnseen = 0
 	m.status = ""
 	m.focus = focusMessages
 	m.loadingBody = bodyKey{}
@@ -824,6 +853,10 @@ func (m Model) renderStatusBar() string {
 		parts = append(parts, m.openFolder)
 		if !m.msgLoading {
 			parts = append(parts, countLabel(len(m.messages), "message"))
+			if m.openUnseen > 0 {
+				// "unread" is an adjective, so it does not pluralise.
+				parts = append(parts, fmt.Sprintf("%d unread", m.openUnseen))
+			}
 		}
 	}
 
@@ -855,4 +888,17 @@ func countLabel(n int, noun string) string {
 	}
 
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// countUnread counts the messages in a list that do not carry \Seen, so the status
+// bar has a number before the first poll returns one.
+func countUnread(messages []mail.Message) uint32 {
+	var unread uint32
+	for i := range messages {
+		if !messages[i].Seen() {
+			unread++
+		}
+	}
+
+	return unread
 }
