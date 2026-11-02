@@ -24,10 +24,14 @@ type Attachment struct {
 	Data        []byte
 }
 
-// Body is the readable part of a message: its text and its attachments.
+// Body is the readable part of a message: its text, its attachments, and the
+// threading chain of the message it came from. The chain is here because the body
+// fetch asks for the whole message (BODY.PEEK[]), so the top-level References
+// header is already in hand; a reply quotes the ancestor chain from it (#24).
 type Body struct {
 	Text        string
 	Attachments []Attachment
+	References  []string
 }
 
 // HTML stripping is deliberately crude: v1 renders no HTML, only its text.
@@ -117,6 +121,10 @@ func parseBody(raw []byte) (*Body, error) {
 	}
 
 	body := &Body{}
+	// The whole message was fetched, so its own References header is parsed here at no
+	// extra cost. A message with no References is ordinary mail, not an error.
+	body.References = strings.Fields(entity.Header.Get("References"))
+
 	var htmlText string
 	unnamed := 0
 
