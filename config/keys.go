@@ -39,6 +39,8 @@ const (
 	KeyReply             = "reply"
 	KeyReplyAll          = "reply_all"
 	KeyForward           = "forward"
+	KeyArchive           = "archive"
+	KeyJunk              = "junk"
 	KeyHelp              = "help"
 )
 
@@ -69,6 +71,8 @@ var keyDefaults = map[string][]string{
 	KeyReply:             {"r"},
 	KeyReplyAll:          {"R"},
 	KeyForward:           {"F"},
+	KeyArchive:           {"A"},
+	KeyJunk:              {"!"},
 	KeyHelp:              {"?"},
 }
 

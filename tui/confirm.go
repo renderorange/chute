@@ -103,9 +103,10 @@ func (m Model) deleteCmd(uids []imap.UID) tea.Cmd {
 	}
 }
 
-// removeDeleted drops the rows the server confirmed and leaves the cursor on a
-// neighbour. A folder refetch after every delete would be far more expensive.
-func (m *Model) removeDeleted(uids []imap.UID) {
+// removeMessages drops the rows the server confirmed and leaves the cursor on a
+// neighbour. A folder refetch after every delete, archive or junk move would be far
+// more expensive.
+func (m *Model) removeMessages(uids []imap.UID) {
 	gone := make(map[imap.UID]bool, len(uids))
 	for _, uid := range uids {
 		gone[uid] = true

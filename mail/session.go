@@ -18,6 +18,10 @@ var errSessionClosed = errors.New("mail: session is closed")
 // account context at the user.
 var ErrAlreadyInTrash = errors.New("mail: already the trash folder")
 
+// ErrAlreadyInRoleFolder reports a move into the mailbox the messages already live in.
+// It is the archive and junk analogue of ErrAlreadyInTrash.
+var ErrAlreadyInRoleFolder = errors.New("mail: already in that folder")
+
 // ErrNoRoleFolder reports that no mailbox serves a role and no override names one.
 // Callers match it with errors.Is to distinguish "cannot file a copy" from a real
 // protocol failure.
@@ -32,6 +36,7 @@ type sessionClient interface {
 	Append(folder string, flags []imap.Flag, msg []byte) (imap.UID, bool, error)
 	StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
 	DeleteMessages(folder, trash string, uids []imap.UID) error
+	MoveToFolder(folder, dest string, uids []imap.UID) error
 	Unseen(folder string) (uint32, error)
 	Poll(folder string, since imap.UID) (PollResult, error)
 	UIDs(folder string) ([]imap.UID, error)
@@ -132,6 +137,36 @@ func (s *Session) Delete(folder string, uids []imap.UID) error {
 	}
 
 	return nil
+}
+
+// MoveTo files messages under the mailbox that serves role, resolved from the last
+// folder listing and the account's override. It is the shared path behind archive and
+// junk. The destination name is returned even when the messages are already in it, so
+// the caller can say where; a role with no mailbox returns the empty name.
+func (s *Session) MoveTo(folder string, role Role, uids []imap.UID) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dest, ok := s.roleFolderLocked(role)
+	if !ok {
+		return "", fmt.Errorf("%w: account %q: set [accounts.imap] %s",
+			ErrNoRoleFolder, s.acct.Name, role)
+	}
+	if strings.EqualFold(folder, dest.Name) {
+		return dest.Name, fmt.Errorf("%w: account %q: %q", ErrAlreadyInRoleFolder, s.acct.Name, folder)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return dest.Name, err
+	}
+
+	if err := client.MoveToFolder(folder, dest.Name, uids); err != nil {
+		s.resetLocked()
+		return dest.Name, err
+	}
+
+	return dest.Name, nil
 }
 
 // roleOverride maps a role onto the account's configured mailbox override. The

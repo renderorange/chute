@@ -308,34 +308,43 @@ func (c *Client) MoveMessages(folder, dest string, uids []imap.UID) error {
 	return nil
 }
 
-// DeleteMessages moves messages to the trash mailbox. It prefers MOVE, falls back
-// to COPY + \Deleted + UID EXPUNGE when the server has UIDPLUS, and refuses when
-// it has neither. It never issues a folder-wide EXPUNGE, which would destroy
-// messages the user did not select.
-func (c *Client) DeleteMessages(folder, trash string, uids []imap.UID) error {
+// MoveToFolder moves messages to dest using the same policy as delete: MOVE when
+// the server has it, COPY + \Deleted + UID EXPUNGE when it has UIDPLUS, and a
+// refusal when it has neither. It never issues a folder-wide EXPUNGE, which would
+// destroy messages the user did not select.
+//
+// Archive and junk are this move with a different destination, so they share it
+// instead of growing a second protocol choice.
+func (c *Client) MoveToFolder(folder, dest string, uids []imap.UID) error {
 	if len(uids) == 0 {
 		return nil
 	}
-	if trash == "" {
-		return fmt.Errorf("mail: account %q: deleting from %q needs a trash mailbox", c.account, folder)
+	if dest == "" {
+		return fmt.Errorf("mail: account %q: moving from %q needs a destination folder", c.account, folder)
 	}
-	// The fallback copies to dest and then expunges the source UIDs, so a trash
-	// folder equal to the source would copy every message onto itself and then
+	// The fallback copies to dest and then expunges the source UIDs, so a
+	// destination equal to the source would copy every message onto itself and then
 	// delete it for good. Refusing here protects against that even if a caller
-	// skips the session's own guard.
-	if strings.EqualFold(trash, folder) {
-		return fmt.Errorf("mail: account %q: %q is the trash folder; refusing to delete it into itself", c.account, folder)
+	// skips its own guard.
+	if strings.EqualFold(dest, folder) {
+		return fmt.Errorf("mail: account %q: %q is the source folder; refusing to move it into itself", c.account, folder)
 	}
 
 	switch {
 	case c.Supports(imap.CapMove):
-		return c.MoveMessages(folder, trash, uids)
+		return c.MoveMessages(folder, dest, uids)
 
 	case c.Supports(imap.CapUIDPlus):
-		return c.copyAndPurge(folder, trash, uids)
+		return c.copyAndPurge(folder, dest, uids)
 	}
 
-	return fmt.Errorf("mail: account %q: deleting from %q needs MOVE or UIDPLUS; the server advertises neither", c.account, folder)
+	return fmt.Errorf("mail: account %q: moving from %q needs MOVE or UIDPLUS; the server advertises neither", c.account, folder)
+}
+
+// DeleteMessages moves messages to the trash mailbox through MoveToFolder, so the
+// policy exists once.
+func (c *Client) DeleteMessages(folder, trash string, uids []imap.UID) error {
+	return c.MoveToFolder(folder, trash, uids)
 }
 
 // copyAndPurge deletes without the MOVE extension: copy to Trash, mark the copies

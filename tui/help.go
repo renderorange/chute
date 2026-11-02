@@ -73,6 +73,8 @@ func helpGroups() []helpGroup {
 				helpAction(actionFilter, "filter"),
 				helpAction(actionVisualRange, "select range"),
 				helpAction(actionDelete, "delete"),
+				helpAction(actionArchive, "archive"),
+				helpAction(actionJunk, "junk"),
 				helpAction(actionToggleFlag, "flag"),
 				helpAction(actionToggleRead, "read/unread"),
 				helpAction(actionAttachments, "attachments"),
@@ -83,6 +85,8 @@ func helpGroups() []helpGroup {
 			rows: []helpRow{
 				helpPair(actionUp, actionDown, "scroll"),
 				helpAction(actionDelete, "delete"),
+				helpAction(actionArchive, "archive"),
+				helpAction(actionJunk, "junk"),
 				helpAction(actionToggleFlag, "flag"),
 				helpAction(actionToggleRead, "read/unread"),
 				helpAction(actionNextThreadMessage, "next in thread"),
