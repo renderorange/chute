@@ -170,6 +170,42 @@ func TestBuildMessageReplyHeaders(t *testing.T) {
 	}
 }
 
+// TestComposeRoundTripKeepsThreadingHeaders proves the draft path is lossless for the
+// headers that thread a reply: BuildMessage writes them into the appended draft and
+// parseCompose reads them back when the draft is reopened, so a drafted reply still lands
+// under the original when it is finally sent.
+func TestComposeRoundTripKeepsThreadingHeaders(t *testing.T) {
+	want := Compose{
+		From:       "blaine@example.org",
+		To:         []string{"one@example.com"},
+		Subject:    "Re: hello",
+		Text:       "body text",
+		MessageID:  "<reply@example.org>",
+		InReplyTo:  "<parent@example.org>",
+		References: []string{"<root@example.org>", "<parent@example.org>"},
+	}
+
+	raw, err := BuildMessage(want)
+	if err != nil {
+		t.Fatalf("BuildMessage: %v", err)
+	}
+
+	got, err := parseCompose(raw)
+	if err != nil {
+		t.Fatalf("parseCompose: %v", err)
+	}
+
+	if got.MessageID != want.MessageID {
+		t.Errorf("Message-ID = %q, want %q", got.MessageID, want.MessageID)
+	}
+	if got.InReplyTo != want.InReplyTo {
+		t.Errorf("In-Reply-To = %q, want %q", got.InReplyTo, want.InReplyTo)
+	}
+	if strings.Join(got.References, " ") != strings.Join(want.References, " ") {
+		t.Errorf("References = %v, want %v", got.References, want.References)
+	}
+}
+
 // TestBuildMessageKeepsUTF8 proves a non-ASCII subject and body survive the round trip.
 func TestBuildMessageKeepsUTF8(t *testing.T) {
 	raw, err := BuildMessage(Compose{

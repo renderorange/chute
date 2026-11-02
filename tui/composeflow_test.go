@@ -684,6 +684,152 @@ func TestMessageForAlwaysCarriesAnID(t *testing.T) {
 	}
 }
 
+// threadedModel opens a single message that already sits in a thread: it has its own
+// Message-ID and a parent recorded in In-Reply-To. The list reads the Message fields,
+// which mail.Client copies out of the envelope when it fetches (mail/client.go:380-384).
+func threadedModel(t *testing.T) Model {
+	t.Helper()
+
+	messages := sampleMessages(1)
+	messages[0].MessageID = "<parent@example.org>"
+	messages[0].InReplyTo = []string{"<grandparent@example.org>"}
+
+	m, _ := withComposeModelMessages(t, messages)
+
+	return m
+}
+
+// TestReplyCarriesThreadingHeaders proves a reply names its parent in In-Reply-To and
+// repeats the ancestor chain plus the parent in References. Without both, a recipient's
+// client files the reply beside the original instead of under it.
+func TestReplyCarriesThreadingHeaders(t *testing.T) {
+	m := threadedModel(t)
+	m = press(t, m, keyMsg("r"))
+
+	if m.compose == nil {
+		t.Fatal("r opened no composer")
+	}
+
+	raw, err := m.messageFor()
+	if err != nil {
+		t.Fatalf("messageFor: %v", err)
+	}
+
+	for _, want := range []string{
+		"In-Reply-To: <parent@example.org>",
+		"References: <grandparent@example.org> <parent@example.org>",
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("the built reply is missing %q:\n%s", want, raw)
+		}
+	}
+}
+
+// TestReplyAllCarriesThreadingHeaders is the same claim on the reply-all path.
+func TestReplyAllCarriesThreadingHeaders(t *testing.T) {
+	m := threadedModel(t)
+	m = press(t, m, keyMsg("R"))
+
+	if m.compose == nil {
+		t.Fatal("R opened no composer")
+	}
+
+	raw, err := m.messageFor()
+	if err != nil {
+		t.Fatalf("messageFor: %v", err)
+	}
+
+	for _, want := range []string{
+		"In-Reply-To: <parent@example.org>",
+		"References: <grandparent@example.org> <parent@example.org>",
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("the built reply-all is missing %q:\n%s", want, raw)
+		}
+	}
+}
+
+// TestReplyToARootHasNoThreadingHeaders proves a message with no Message-ID produces a
+// reply with no threading headers rather than headers pointing at nothing.
+func TestReplyToARootHasNoThreadingHeaders(t *testing.T) {
+	m, _ := withComposeModel(t)
+	m = press(t, m, keyMsg("r"))
+
+	raw, err := m.messageFor()
+	if err != nil {
+		t.Fatalf("messageFor: %v", err)
+	}
+
+	for _, unwanted := range []string{"In-Reply-To:", "References:"} {
+		if strings.Contains(string(raw), unwanted) {
+			t.Errorf("a reply to a root message carries %q:\n%s", unwanted, raw)
+		}
+	}
+}
+
+// TestForwardCarriesNoThreadingHeaders proves F does not file the forward inside the
+// original's thread, which is what mail.ForwardCompose already decides.
+func TestForwardCarriesNoThreadingHeaders(t *testing.T) {
+	m := threadedModel(t)
+	m = press(t, m, keyMsg("F"))
+
+	if m.compose == nil {
+		t.Fatal("F opened no composer")
+	}
+
+	raw, err := m.messageFor()
+	if err != nil {
+		t.Fatalf("messageFor: %v", err)
+	}
+
+	for _, unwanted := range []string{"In-Reply-To:", "References:"} {
+		if strings.Contains(string(raw), unwanted) {
+			t.Errorf("the forward carries %q:\n%s", unwanted, raw)
+		}
+	}
+}
+
+// TestReopenedDraftKeepsThreadingHeaders proves the draft round trip is lossless: a draft
+// fetched back into the composer still builds both threading headers, so sending a drafted
+// reply lands it under the original rather than beside it.
+func TestReopenedDraftKeepsThreadingHeaders(t *testing.T) {
+	m := openInbox(t, withInbox(t, sampleMessages(1), nil))
+	m.cfg.Accounts[m.account].From = "me@example.org"
+	m.openFolder = "Drafts"
+	m.findDraftsFolder = func(config.Account) (string, bool) { return "Drafts", true }
+	m.fetchCompose = func(config.Account, string, imap.UID) (*mail.Compose, error) {
+		return &mail.Compose{
+			From:       "me@example.org",
+			To:         []string{"one@example.com"},
+			Subject:    "Re: subject",
+			Text:       "draft text",
+			MessageID:  "<draft@example.org>",
+			InReplyTo:  "<parent@example.org>",
+			References: []string{"<grandparent@example.org>", "<parent@example.org>"},
+		}, nil
+	}
+
+	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.compose == nil {
+		t.Fatal("opening the draft did not open the composer")
+	}
+
+	raw, err := m.messageFor()
+	if err != nil {
+		t.Fatalf("messageFor: %v", err)
+	}
+
+	for _, want := range []string{
+		"In-Reply-To: <parent@example.org>",
+		"References: <grandparent@example.org> <parent@example.org>",
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("the reopened draft is missing %q:\n%s", want, raw)
+		}
+	}
+}
+
 // TestComposeResultsForAnotherAccountAreIgnored proves a save, send or draft fetch that
 // finishes after the user switches accounts cannot rewrite the new account's status or
 // replace the message being edited.
