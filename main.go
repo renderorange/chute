@@ -50,7 +50,8 @@ func main() {
 		return
 	}
 
-	model := tui.New(cfg, version, mailOptions...)
+	model := tui.New(cfg, version, mailOptions...).
+		WithSelection(config.LoadState(), config.SaveState)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, runErr := program.Run()

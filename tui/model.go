@@ -86,6 +86,11 @@ type Model struct {
 	filter     string
 	filterOpen bool
 
+	// selection is the last account and folder, remembered across restarts, and
+	// saveState persists it. A nil writer means this model keeps no state.
+	selection config.State
+	saveState func(config.State) error
+
 	compose           *composer
 	composeDraftUID   imap.UID
 	composeDraftKnown bool
@@ -272,14 +277,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if !m.started {
 			m.started = true
+
+			// The folder this account had open last time wins over the configured start
+			// folder while the listing still has it. Neither is a change the user just
+			// made, so neither writes the state file: someone who never switches
+			// anything does not get a new file in their home directory.
+			if folder, ok := m.rememberedFolder(); ok {
+				m.moveFolderCursorTo(folder)
+
+				return m.openFolderByName(folder.Name, false)
+			}
 			if folder, ok := m.startFolder(); ok {
-				for i := range m.folders {
-					if m.folders[i].Name == folder.Name {
-						m.folderCursor = i
-						break
-					}
-				}
-				return m.openSelectedFolder()
+				m.moveFolderCursorTo(folder)
+
+				return m.openFolderByName(folder.Name, false)
 			}
 			if name := m.cfg.Accounts[m.account].StartFolderName(); name != "" {
 				m.status = fmt.Sprintf("start folder %q not found", name)
@@ -597,7 +608,14 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.openFolder = folder.Name
+	return m.openFolderByName(folder.Name, true)
+}
+
+// openFolderByName starts loading a folder and clears the per-folder view state.
+// remember writes the selection: the automatic open at startup is not a change the
+// user made, and must not create a state file for someone who switches nothing.
+func (m Model) openFolderByName(name string, remember bool) (tea.Model, tea.Cmd) {
+	m.openFolder = name
 	m.filter = ""
 	m.messages = nil
 	m.rows = nil
@@ -615,7 +633,11 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 	m.foldersOpen = false
 	m.folderOverlayCursor = 0
 
-	return m, m.loadMessagesCmd(folder.Name)
+	if remember {
+		m.rememberSelection()
+	}
+
+	return m, m.loadMessagesCmd(name)
 }
 
 // openSelectedMessage loads the body for the message under the cursor. The

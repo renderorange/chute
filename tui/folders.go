@@ -118,6 +118,17 @@ func (m Model) selectedFolder() (mail.Folder, bool) {
 	return m.folders[m.folderCursor], true
 }
 
+// moveFolderCursorTo puts the folder cursor on folder, if the listing still has it.
+func (m *Model) moveFolderCursorTo(folder mail.Folder) {
+	for i := range m.folders {
+		if m.folders[i].Name == folder.Name {
+			m.folderCursor = i
+
+			return
+		}
+	}
+}
+
 // startFolder resolves the account's start folder against the loaded list.
 func (m Model) startFolder() (mail.Folder, bool) {
 	if m.account < 0 || m.account >= len(m.cfg.Accounts) {
