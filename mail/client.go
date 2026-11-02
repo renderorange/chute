@@ -124,6 +124,21 @@ func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
 	return messagesFromBuffers(buffers), nil
 }
 
+// Unseen counts the messages in folder that do not carry \Seen, with one STATUS
+// command. A server that omits the number is reported as zero: the count is a hint
+// in the account selector, and a missing number is not worth failing over.
+func (c *Client) Unseen(folder string) (uint32, error) {
+	data, err := c.conn.Status(folder, &imap.StatusOptions{NumUnseen: true}).Wait()
+	if err != nil {
+		return 0, fmt.Errorf("mail: account %q: counting unread in %q: %w", c.account, folder, err)
+	}
+	if data.NumUnseen == nil {
+		return 0, nil
+	}
+
+	return *data.NumUnseen, nil
+}
+
 // allMessages is the sequence set covering an entire folder. It must be a value
 // SeqSet: go-imap's imapwire.NumSetKind type-switches on the value type and
 // panics on a *imap.SeqSet, which crashed the UI when a folder opened.
