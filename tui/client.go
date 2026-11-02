@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
@@ -40,6 +43,17 @@ type draftsFolderFunc func(acct config.Account) (string, bool)
 // unseenFunc counts the unseen messages in one folder of one account.
 type unseenFunc func(acct config.Account, folder string) (uint32, error)
 
+// pollFunc runs one incremental new-mail check for a folder.
+type pollFunc func(acct config.Account, folder string, since imap.UID) (mail.PollResult, error)
+
+// uidsFunc lists every message UID in a folder, for reconciling a deletion made
+// by another client.
+type uidsFunc func(acct config.Account, folder string) ([]imap.UID, error)
+
+// tickFunc arms a one-shot timer. It exists so a test can observe the interval and
+// fire the tick without waiting for it.
+type tickFunc func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd
+
 // loaders groups the background loaders the model calls.
 type loaders struct {
 	folders        loadFoldersFunc
@@ -54,6 +68,8 @@ type loaders struct {
 	sendMessage      sendMessageFunc
 	findDraftsFolder draftsFolderFunc
 	countUnseen      unseenFunc
+	pollFolder       pollFunc
+	countUIDs        uidsFunc
 }
 
 // sessionLoaders binds every loader to one persistent session per account, so
@@ -97,6 +113,12 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		countUnseen: func(acct config.Account, folder string) (uint32, error) {
 			return manager.For(acct).Unseen(folder)
+		},
+		pollFolder: func(acct config.Account, folder string, since imap.UID) (mail.PollResult, error) {
+			return manager.For(acct).Poll(folder, since)
+		},
+		countUIDs: func(acct config.Account, folder string) ([]imap.UID, error) {
+			return manager.For(acct).UIDs(folder)
 		},
 	}
 }
@@ -157,5 +179,31 @@ type deleteMsg struct {
 type unseenMsg struct {
 	account string
 	count   uint32
+	err     error
+}
+
+// folderKey identifies one folder of one account.
+type folderKey struct {
+	account string
+	folder  string
+}
+
+// pollTickMsg asks for one new-mail check.
+type pollTickMsg struct{}
+
+// pollMsg carries the result of one incremental check.
+type pollMsg struct {
+	account string
+	folder  string
+	result  mail.PollResult
+	err     error
+}
+
+// uidsMsg carries every surviving UID in a folder, after a poll found the message
+// count had dropped because another client removed mail.
+type uidsMsg struct {
+	account string
+	folder  string
+	uids    []imap.UID
 	err     error
 }

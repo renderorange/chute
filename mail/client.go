@@ -124,6 +124,104 @@ func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
 	return messagesFromBuffers(buffers), nil
 }
 
+// PollResult is what one incremental check found in a folder.
+type PollResult struct {
+	// Messages holds only the envelopes whose UID is greater than the high-water
+	// mark the caller passed in.
+	Messages []Message
+
+	// Total is the server's message count for the folder, used to notice that
+	// another client removed something.
+	Total uint32
+
+	// Unseen is the server's unread count for the folder.
+	Unseen uint32
+}
+
+// Poll runs one incremental new-mail check: SELECT for the message count, a
+// UID FETCH of everything after since, and a STATUS for the unread count. It
+// fetches no body and no envelope the caller already has.
+func (c *Client) Poll(folder string, since imap.UID) (PollResult, error) {
+	selectData, err := c.conn.Select(folder, nil).Wait()
+	if err != nil {
+		return PollResult{}, fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
+	}
+
+	result := PollResult{Total: selectData.NumMessages}
+
+	if selectData.NumMessages > 0 {
+		messages, err := c.fetchAfter(folder, since)
+		if err != nil {
+			return PollResult{}, err
+		}
+		result.Messages = messages
+	}
+
+	status, err := c.conn.Status(folder, &imap.StatusOptions{NumUnseen: true}).Wait()
+	if err != nil {
+		return PollResult{}, fmt.Errorf("mail: account %q: counting unread in %q: %w", c.account, folder, err)
+	}
+	if status.NumUnseen != nil {
+		result.Unseen = *status.NumUnseen
+	}
+
+	return result, nil
+}
+
+// fetchAfter runs the incremental FETCH and keeps only the messages newer than
+// since. UID FETCH n:* also returns the highest-UID message when n exceeds it, so
+// without the filter a quiet poll would re-announce the last message as new.
+func (c *Client) fetchAfter(folder string, since imap.UID) ([]Message, error) {
+	var set imap.UIDSet
+	set.AddRange(since+1, 0)
+
+	cmd := c.conn.Fetch(set, &imap.FetchOptions{
+		Envelope:     true,
+		Flags:        true,
+		InternalDate: true,
+		RFC822Size:   true,
+		UID:          true,
+	})
+	buffers, err := cmd.Collect()
+	cmd.Close()
+
+	if err != nil {
+		return nil, fmt.Errorf("mail: account %q: polling %q: %w", c.account, folder, err)
+	}
+
+	fresh := make([]Message, 0, len(buffers))
+	for _, msg := range messagesFromBuffers(buffers) {
+		if msg.UID > since {
+			fresh = append(fresh, msg)
+		}
+	}
+
+	return fresh, nil
+}
+
+// UIDs lists every message UID in a folder, with no envelope. A poll uses it after
+// the server's message count drops, to learn which rows another client removed.
+func (c *Client) UIDs(folder string) ([]imap.UID, error) {
+	if _, err := c.conn.Select(folder, nil).Wait(); err != nil {
+		return nil, fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
+	}
+
+	cmd := c.conn.Fetch(allMessages(), &imap.FetchOptions{UID: true})
+	defer cmd.Close()
+
+	buffers, err := cmd.Collect()
+	if err != nil {
+		return nil, fmt.Errorf("mail: account %q: listing UIDs in %q: %w", c.account, folder, err)
+	}
+
+	uids := make([]imap.UID, 0, len(buffers))
+	for _, buf := range buffers {
+		uids = append(uids, buf.UID)
+	}
+
+	return uids, nil
+}
+
 // Unseen counts the messages in folder that do not carry \Seen, with one STATUS
 // command. A server that omits the number is reported as zero: the count is a hint
 // in the account selector, and a missing number is not worth failing over.

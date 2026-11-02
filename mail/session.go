@@ -33,6 +33,8 @@ type sessionClient interface {
 	StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
 	DeleteMessages(folder, trash string, uids []imap.UID) error
 	Unseen(folder string) (uint32, error)
+	Poll(folder string, since imap.UID) (PollResult, error)
+	UIDs(folder string) ([]imap.UID, error)
 	Close() error
 }
 
@@ -208,6 +210,46 @@ func (s *Session) Unseen(folder string) (uint32, error) {
 	}
 
 	return count, nil
+}
+
+// Poll runs one incremental new-mail check for a folder over the persistent
+// connection.
+func (s *Session) Poll(folder string, since imap.UID) (PollResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return PollResult{}, err
+	}
+
+	result, err := client.Poll(folder, since)
+	if err != nil {
+		s.resetLocked()
+		return PollResult{}, err
+	}
+
+	return result, nil
+}
+
+// UIDs lists every message UID in a folder. A poll uses it to reconcile a message
+// count that dropped because another client removed mail.
+func (s *Session) UIDs(folder string) ([]imap.UID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	uids, err := client.UIDs(folder)
+	if err != nil {
+		s.resetLocked()
+		return nil, err
+	}
+
+	return uids, nil
 }
 
 // StoreFlags adds or removes flags on every listed message in one command.

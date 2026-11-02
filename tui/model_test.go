@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/emersion/go-imap/v2"
@@ -27,12 +28,20 @@ func testConfig() *config.Config {
 	}
 }
 
-// sized returns a model that has received a window size.
-func sized(width, height int) Model {
-	m := New(testConfig(), "test")
+// sizedWith returns a model for cfg that has received a window size and whose
+// clock never fires, so no test waits on a real timer. A test that wants to
+// observe polling sets its own clock.
+func sizedWith(cfg *config.Config, width, height int) Model {
+	m := New(cfg, "test")
+	m.clock = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd { return nil }
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: height})
 
 	return next.(Model)
+}
+
+// sized returns a model that has received a window size.
+func sized(width, height int) Model {
+	return sizedWith(testConfig(), width, height)
 }
 
 // firstContentLine returns the first non-blank line of the view, which is where the
@@ -242,9 +251,7 @@ func TestFoldersLoadOpensStartFolder(t *testing.T) {
 	cfg := testConfig()
 	cfg.Accounts[0].StartFolder = nil
 
-	m := New(cfg, "test")
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
-	m = next.(Model)
+	m := sizedWith(cfg, 140, 40)
 	m.loadFolders = fakeFolders([]mail.Folder{
 		{Name: "INBOX", Delimiter: '/'},
 		{Name: "Work", Delimiter: '/'},
@@ -273,12 +280,10 @@ func TestStartFolderNotFound(t *testing.T) {
 	cfg := testConfig()
 	cfg.Accounts[0].StartFolder = startFolder("Nope")
 
-	m := New(cfg, "test")
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
-	m = next.(Model)
+	m := sizedWith(cfg, 140, 40)
 	m.loadFolders = fakeFolders([]mail.Folder{{Name: "INBOX", Delimiter: '/'}}, nil)
 
-	next, _ = m.Update(m.Init()())
+	next, _ := m.Update(m.Init()())
 	m = next.(Model)
 
 	if m.openFolder != "" {
@@ -293,9 +298,7 @@ func TestStartFolderOpensOnlyOnce(t *testing.T) {
 	cfg := testConfig()
 	cfg.Accounts[0].StartFolder = nil
 
-	m := New(cfg, "test")
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
-	m = next.(Model)
+	m := sizedWith(cfg, 140, 40)
 	m.loadFolders = fakeFolders([]mail.Folder{{Name: "INBOX", Delimiter: '/'}}, nil)
 	m.loadMessages = fakeMessages(sampleMessages(1), nil)
 

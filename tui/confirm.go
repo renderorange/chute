@@ -118,6 +118,7 @@ func (m *Model) removeDeleted(uids []imap.UID) {
 	m.messages = kept
 	m.rebuildRows()
 	m.visualAnchor = noVisualAnchor
+	m.openUnseen = countUnread(m.messages)
 }
 
 // renderConfirmModal centres the delete confirmation in the content area.
