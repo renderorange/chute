@@ -16,8 +16,8 @@ func TestComputeLayoutThreeColumns(t *testing.T) {
 	if layout.Folders.Width < MinFoldersWidth || layout.Folders.Width > MaxFoldersWidth {
 		t.Errorf("folders width = %d, want %d..%d", layout.Folders.Width, MinFoldersWidth, MaxFoldersWidth)
 	}
-	if layout.Messages.Width < MinMessagesWidth || layout.Messages.Width > MaxMessagesWidth {
-		t.Errorf("messages width = %d, want %d..%d", layout.Messages.Width, MinMessagesWidth, MaxMessagesWidth)
+	if layout.Messages.Width < MinMessagesWidth {
+		t.Errorf("messages width = %d, want at least %d", layout.Messages.Width, MinMessagesWidth)
 	}
 	if layout.Reader.Width < MinReaderWidth {
 		t.Errorf("reader width = %d, want at least %d", layout.Reader.Width, MinReaderWidth)
@@ -133,5 +133,185 @@ func TestComputeLayoutHeightsMatch(t *testing.T) {
 		if !layout.Messages.Empty() && layout.Messages.Height != ContentHeight(50) {
 			t.Errorf("width %d: messages height = %d, want %d", width, layout.Messages.Height, ContentHeight(50))
 		}
+	}
+}
+
+// assertColumnsSum checks the invariant every layout must hold: the visible columns add up
+// to the content width, so no pane can overlap another or leave a gap.
+func assertColumnsSum(t *testing.T, layout Layout, width int) {
+	t.Helper()
+
+	sum := layout.Folders.Width + layout.Messages.Width + layout.Reader.Width
+	if layout.Mode == ModeTwo {
+		sum = layout.Messages.Width + layout.Reader.Width
+	}
+
+	if want := ContentWidth(width); sum != want {
+		t.Errorf("width %d: columns sum to %d, want %d (%+v)", width, sum, want, layout)
+	}
+}
+
+// TestComputeLayoutWithColumnWidths proves an explicit column count is what the pane gets,
+// rather than a proportion the user cannot predict.
+func TestComputeLayoutWithColumnWidths(t *testing.T) {
+	layout := ComputeLayoutWith(200, 40, Widths{FoldersWidth: 30, MessagesWidth: 70})
+
+	if layout.Mode != ModeThree {
+		t.Fatalf("mode = %v, want ModeThree", layout.Mode)
+	}
+	if got := layout.Folders.Width; got != 30 {
+		t.Errorf("folders width = %d, want 30", got)
+	}
+	if got := layout.Messages.Width; got != 70 {
+		t.Errorf("messages width = %d, want 70", got)
+	}
+	if got, want := layout.Reader.Width, ContentWidth(200)-100; got != want {
+		t.Errorf("reader width = %d, want %d", got, want)
+	}
+	assertColumnsSum(t, layout, 200)
+}
+
+// TestComputeLayoutWithPercents proves a percentage is resolved against the content width,
+// not the terminal width, so the three panes still add up.
+func TestComputeLayoutWithPercents(t *testing.T) {
+	layout := ComputeLayoutWith(200, 40, Widths{FoldersPercent: 20, MessagesPercent: 50})
+
+	content := ContentWidth(200)
+	if got, want := layout.Folders.Width, content*20/100; got != want {
+		t.Errorf("folders width = %d, want %d", got, want)
+	}
+	if got, want := layout.Messages.Width, content*50/100; got != want {
+		t.Errorf("messages width = %d, want %d", got, want)
+	}
+	assertColumnsSum(t, layout, 200)
+}
+
+// TestColumnWidthBeatsPercent proves the precedence the config documents: a column count
+// wins over a percentage for the same pane.
+func TestColumnWidthBeatsPercent(t *testing.T) {
+	layout := ComputeLayoutWith(200, 40, Widths{
+		FoldersPercent:  50,
+		FoldersWidth:    26,
+		MessagesPercent: 10,
+		MessagesWidth:   55,
+	})
+
+	if got := layout.Folders.Width; got != 26 {
+		t.Errorf("folders width = %d, want the configured 26 columns", got)
+	}
+	if got := layout.Messages.Width; got != 55 {
+		t.Errorf("messages width = %d, want the configured 55 columns", got)
+	}
+	assertColumnsSum(t, layout, 200)
+}
+
+// TestReaderMinimumTrimsTheList proves the reader's 36 columns are not negotiable: a list
+// width that would starve it is cut back instead of honoured.
+func TestReaderMinimumTrimsTheList(t *testing.T) {
+	layout := ComputeLayoutWith(120, 40, Widths{MessagesWidth: 150})
+
+	want := ContentWidth(120) - layout.Folders.Width - MinReaderWidth
+	if got := layout.Messages.Width; got != want {
+		t.Errorf("messages width = %d, want %d to leave the reader its minimum", got, want)
+	}
+	if got := layout.Reader.Width; got != MinReaderWidth {
+		t.Errorf("reader width = %d, want %d", got, MinReaderWidth)
+	}
+	assertColumnsSum(t, layout, 120)
+}
+
+// TestReaderMinimumTrimsTheFoldersLast proves the order of sacrifice: the message list
+// shrinks to its floor before the folder pane gives up a column.
+func TestReaderMinimumTrimsTheFoldersLast(t *testing.T) {
+	layout := ComputeLayoutWith(120, 40, Widths{FoldersWidth: 500, MessagesWidth: 500})
+
+	if got := layout.Messages.Width; got != MinMessagesWidth {
+		t.Errorf("messages width = %d, want the floor %d", got, MinMessagesWidth)
+	}
+
+	want := ContentWidth(120) - MinMessagesWidth - MinReaderWidth
+	if got := layout.Folders.Width; got != want {
+		t.Errorf("folders width = %d, want %d, the remainder once the reader has its minimum", got, want)
+	}
+	if got := layout.Reader.Width; got != MinReaderWidth {
+		t.Errorf("reader width = %d, want %d", got, MinReaderWidth)
+	}
+	assertColumnsSum(t, layout, 120)
+}
+
+// TestConfiguredWidthIsClampedToTheFloor proves a width too small to be usable is raised to
+// the pane minimum rather than rendering a two-column list. config cannot reject it, because
+// the same file is used at every terminal size.
+func TestConfiguredWidthIsClampedToTheFloor(t *testing.T) {
+	layout := ComputeLayoutWith(200, 40, Widths{FoldersWidth: 4, MessagesWidth: 10})
+
+	if got := layout.Folders.Width; got != MinFoldersWidth {
+		t.Errorf("folders width = %d, want the floor %d", got, MinFoldersWidth)
+	}
+	if got := layout.Messages.Width; got != MinMessagesWidth {
+		t.Errorf("messages width = %d, want the floor %d", got, MinMessagesWidth)
+	}
+	assertColumnsSum(t, layout, 200)
+}
+
+// TestAutomaticMessagesWidthGrowsWithTheTerminal is the defect in #33: the list was pinned
+// at 48 columns while a 200-column terminal gave the reader 118. The proportion now stands
+// with only a floor under it, and the breakpoint is unchanged.
+func TestAutomaticMessagesWidthGrowsWithTheTerminal(t *testing.T) {
+	wide := ComputeLayout(200, 40)
+	if got := wide.Messages.Width; got <= 48 {
+		t.Errorf("messages width at 200 columns = %d, want more than the old 48-column cap", got)
+	}
+
+	atBreakpoint := ComputeLayout(ThreeColumnBreakpoint, 40)
+	if got := atBreakpoint.Messages.Width; got != MinMessagesWidth {
+		t.Errorf("messages width at %d columns = %d, want the floor %d",
+			ThreeColumnBreakpoint, got, MinMessagesWidth)
+	}
+	if got := atBreakpoint.Folders.Width; got != 28 {
+		t.Errorf("folders width at %d columns = %d, want the automatic 28", ThreeColumnBreakpoint, got)
+	}
+	if got := atBreakpoint.Reader.Width; got != 46 {
+		t.Errorf("reader width at %d columns = %d, want 46", ThreeColumnBreakpoint, got)
+	}
+}
+
+// TestTwoPaneHonoursMessagesWidth proves the message list is configurable in two-pane mode
+// as well, where the folder pane is not drawn.
+func TestTwoPaneHonoursMessagesWidth(t *testing.T) {
+	layout := ComputeLayoutWith(115, 30, Widths{MessagesWidth: 50})
+
+	if layout.Mode != ModeTwo {
+		t.Fatalf("mode = %v, want ModeTwo", layout.Mode)
+	}
+	if got := layout.Messages.Width; got != 50 {
+		t.Errorf("messages width = %d, want 50", got)
+	}
+	if got, want := layout.Reader.Width, ContentWidth(115)-50; got != want {
+		t.Errorf("reader width = %d, want %d", got, want)
+	}
+	assertColumnsSum(t, layout, 115)
+}
+
+// TestZeroWidthsIsAutomatic proves the unconfigured install keeps the built-in rules, so a
+// config without a [layout] section behaves exactly as before.
+func TestZeroWidthsIsAutomatic(t *testing.T) {
+	for _, width := range []int{120, 140, 200} {
+		if got, want := ComputeLayoutWith(width, 40, Widths{}), ComputeLayout(width, 40); got != want {
+			t.Errorf("width %d: ComputeLayoutWith(zero) = %+v, want %+v", width, got, want)
+		}
+	}
+}
+
+// TestSinglePaneIgnoresWidths proves a terminal too narrow for two panes is unaffected by
+// sizing config, which has nothing to size there.
+func TestSinglePaneIgnoresWidths(t *testing.T) {
+	layout := ComputeLayoutWith(105, 59, Widths{FoldersWidth: 40, MessagesWidth: 60})
+
+	if layout.Mode != ModeSingle {
+		t.Fatalf("mode = %v, want ModeSingle", layout.Mode)
+	}
+	if got, want := layout.Reader.Width, ContentWidth(105); got != want {
+		t.Errorf("reader width = %d, want %d", got, want)
 	}
 }

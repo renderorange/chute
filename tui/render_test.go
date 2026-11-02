@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
+	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
 )
 
@@ -377,6 +378,78 @@ func TestViewAtTheMinimumSize(t *testing.T) {
 		}
 		if status := lines[len(lines)-2]; !strings.Contains(status, "[fastmail]") {
 			t.Errorf("%s: the status bar is missing: %q", tc.title, status)
+		}
+	}
+}
+
+// TestWideTerminalFixesTheNarrowList is the defect in #33 stated as a test: at 200 columns
+// the message list used to be pinned at 48 while the reader took 118. The default now grows.
+func TestWideTerminalFixesTheNarrowList(t *testing.T) {
+	m := loaded(t, 200, 50, sampleFolders(3), nil)
+
+	layout := m.layout()
+	if got := layout.Messages.Width; got <= 48 {
+		t.Errorf("messages width at 200 columns = %d, want more than the old 48-column cap", got)
+	}
+	if got := layout.Reader.Width; got >= ContentWidth(200)-48-28 {
+		t.Errorf("reader width at 200 columns = %d, want it to give room to the list", got)
+	}
+
+	view := m.View()
+	for i, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got != 200 {
+			t.Fatalf("line %d is %d cells, want 200: %q", i, got, line)
+		}
+	}
+}
+
+// TestConfiguredWidthsReachTheFrame proves a [layout] section changes what is rendered, not
+// just what ComputeLayoutWith would return: the frame keeps filling the terminal exactly
+// while the panes move to the configured widths.
+func TestConfiguredWidthsReachTheFrame(t *testing.T) {
+	m := loaded(t, 200, 50, sampleFolders(3), nil)
+	m.loadMessages = fakeMessages(sampleMessages(3), nil)
+	m = openInbox(t, m)
+	m.cfg.Layout = config.Layout{FoldersWidth: 30, MessagesWidth: 70}
+
+	layout := m.layout()
+	if got := layout.Folders.Width; got != 30 {
+		t.Errorf("folders width = %d, want the configured 30", got)
+	}
+	if got := layout.Messages.Width; got != 70 {
+		t.Errorf("messages width = %d, want the configured 70", got)
+	}
+	if got, want := layout.Reader.Width, ContentWidth(200)-100; got != want {
+		t.Errorf("reader width = %d, want %d", got, want)
+	}
+
+	view := m.View()
+	for i, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got != 200 {
+			t.Fatalf("line %d is %d cells, want 200: %q", i, got, line)
+		}
+	}
+}
+
+// TestConfiguredWidthsFailOverRatherThanStarveTheReader proves an impossible config still
+// renders a usable frame: the layout trims the panes instead of producing a negative or
+// zero-width reader, which would panic the renderers.
+func TestConfiguredWidthsFailOverRatherThanStarveTheReader(t *testing.T) {
+	m := loaded(t, 120, 30, sampleFolders(3), nil)
+	m.cfg.Layout = config.Layout{FoldersWidth: 400, MessagesWidth: 400}
+
+	layout := m.layout()
+	if layout.Reader.Width < MinReaderWidth {
+		t.Errorf("reader width = %d, want at least %d", layout.Reader.Width, MinReaderWidth)
+	}
+	if layout.Reader.Width < 1 {
+		t.Fatal("the reader has no width to render into")
+	}
+
+	view := m.View()
+	for i, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got != 120 {
+			t.Fatalf("line %d is %d cells, want 120: %q", i, got, line)
 		}
 	}
 }

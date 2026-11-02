@@ -60,22 +60,55 @@ func ContentHeight(height int) int {
 	return h
 }
 
-// ComputeLayout sizes the panels for a terminal of the given dimensions.
-//
-// Widths always sum to ContentWidth: the reader absorbs whatever the other panels
-// do not take.
+// Widths is the configured panel sizing, in the shape config.Layout provides. A zero
+// field means automatic: the built-in rule for that pane decides. A non-zero width wins
+// over the matching percentage.
+type Widths struct {
+	FoldersPercent  int
+	MessagesPercent int
+	FoldersWidth    int
+	MessagesWidth   int
+}
+
+// Automatic proportions. Folders keep a window because folder names are short; the message
+// list has only a floor, so it grows with the terminal.
+const (
+	autoFoldersPercent     = 25
+	autoMessagesPercentT   = 33
+	autoMessagesPercentTwo = 45
+)
+
+// ComputeLayout sizes the panels for a terminal of the given dimensions, using the built-in
+// width rules.
 func ComputeLayout(width, height int) Layout {
+	return ComputeLayoutWith(width, height, Widths{})
+}
+
+// ComputeLayoutWith sizes the panels for a terminal of the given dimensions and a
+// configured sizing.
+//
+// Widths always sum to ContentWidth: the reader absorbs whatever the other panels do not
+// take, and it keeps MinReaderWidth by shrinking the message list first and the folder pane
+// second. A configured width that cannot fit is trimmed to those floors rather than
+// rejected, because the same config is used at every terminal size.
+func ComputeLayoutWith(width, height int, widths Widths) Layout {
 	w := ContentWidth(width)
 	h := ContentHeight(height)
 
 	switch {
 	case width >= ThreeColumnBreakpoint:
-		folders := clamp(w/4, MinFoldersWidth, MaxFoldersWidth)
-		messages := clamp(w/3, MinMessagesWidth, MaxMessagesWidth)
+		folders := folderColumns(w, widths)
+		messages := messageColumns(w, widths, autoMessagesPercentT)
 
-		// Give the reader its minimum back from the messages column first.
-		if w-folders-messages < MinReaderWidth {
-			messages = clamp(w-folders-MinReaderWidth, MinMessagesWidth, MaxMessagesWidth)
+		// Give the reader its minimum back, from the list first and the folders last.
+		if short := MinReaderWidth - (w - folders - messages); short > 0 {
+			cut := min(short, messages-MinMessagesWidth)
+			messages -= cut
+			short -= cut
+
+			if short > 0 {
+				folders -= min(short, folders-MinFoldersWidth)
+			}
 		}
 		if rest := w - folders - messages; rest < 1 {
 			messages = max(0, w-folders-1)
@@ -89,7 +122,7 @@ func ComputeLayout(width, height int) Layout {
 		}
 
 	case width >= NarrowBreakpoint:
-		messages := clamp(w*45/100, MinMessagesWidth, MaxMessagesWidth)
+		messages := messageColumns(w, widths, autoMessagesPercentTwo)
 		if w-messages < MinReaderWidth {
 			messages = max(0, w-MinReaderWidth)
 		}
@@ -110,6 +143,34 @@ func ComputeLayout(width, height int) Layout {
 	}
 }
 
+// folderColumns sizes the folder pane: configured columns, then a configured percentage,
+// then the automatic quarter of the content width, kept inside its window because folder
+// names are short and a wide folder pane wastes the screen.
+func folderColumns(w int, widths Widths) int {
+	switch {
+	case widths.FoldersWidth > 0:
+		return max(widths.FoldersWidth, MinFoldersWidth)
+	case widths.FoldersPercent > 0:
+		return max(w*widths.FoldersPercent/100, MinFoldersWidth)
+	}
+
+	return clamp(w*autoFoldersPercent/100, MinFoldersWidth, MaxFoldersWidth)
+}
+
+// messageColumns sizes the message list: configured columns, then a configured percentage,
+// then the automatic percentage for this mode. It has a floor and no ceiling, so the list
+// grows with the terminal instead of pinning at a maximum.
+func messageColumns(w int, widths Widths, autoPercent int) int {
+	switch {
+	case widths.MessagesWidth > 0:
+		return max(widths.MessagesWidth, MinMessagesWidth)
+	case widths.MessagesPercent > 0:
+		return max(w*widths.MessagesPercent/100, MinMessagesWidth)
+	}
+
+	return max(w*autoPercent/100, MinMessagesWidth)
+}
+
 func clamp(v, low, high int) int {
 	if v < low {
 		return low
@@ -121,8 +182,8 @@ func clamp(v, low, high int) int {
 	return v
 }
 
-func max(a, b int) int {
-	if a > b {
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 

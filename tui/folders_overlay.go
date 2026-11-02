@@ -15,7 +15,7 @@ func (m Model) openFolders() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if ComputeLayout(m.width, m.height).Mode != ModeTwo {
+	if m.layout().Mode != ModeTwo {
 		m.focus = focusFolders
 		m.status = ""
 		return m, nil

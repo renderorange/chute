@@ -12,7 +12,7 @@ func (m Model) folderRows() int {
 		return 1
 	}
 
-	layout := ComputeLayout(m.width, m.height)
+	layout := m.layout()
 	if layout.Folders.Empty() {
 		return layout.Reader.Height - 1
 	}

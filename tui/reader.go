@@ -13,7 +13,7 @@ func (m Model) readerRows() int {
 		return 1
 	}
 
-	rows := ComputeLayout(m.width, m.height).Reader.Height - 1
+	rows := m.layout().Reader.Height - 1
 	if rows < 1 {
 		return 1
 	}
@@ -27,7 +27,7 @@ func (m Model) readerInnerWidth() int {
 		return 1
 	}
 
-	width := ComputeLayout(m.width, m.height).Reader.Width - (2 * PanelPaddingHorizontal)
+	width := m.layout().Reader.Width - (2 * PanelPaddingHorizontal)
 	if width < 1 {
 		return 1
 	}

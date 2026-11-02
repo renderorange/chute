@@ -414,3 +414,87 @@ func TestReplyPositionRejectsUnknown(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadLayout proves the four sizing keys reach the config, both the percentages and
+// the absolute widths, since the TUI treats them differently.
+func TestLoadLayout(t *testing.T) {
+	body := validConfig + `
+[layout]
+folders_percent = 10
+messages_percent = 25
+folders_width = 30
+messages_width = 60
+`
+
+	cfg, err := Load(writeConfig(t, body, 0o600))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	want := Layout{FoldersPercent: 10, MessagesPercent: 25, FoldersWidth: 30, MessagesWidth: 60}
+	if got := cfg.Layout; got != want {
+		t.Errorf("Layout = %+v, want %+v", got, want)
+	}
+}
+
+// TestLoadLayoutDefaultsToAutomatic proves an absent [layout] section leaves every key at
+// zero, which the TUI reads as "use the built-in rules". A default filled in here would
+// silently pin the sizing and make the automatic rules unreachable.
+func TestLoadLayoutDefaultsToAutomatic(t *testing.T) {
+	cfg, err := Load(writeConfig(t, validConfig, 0o600))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := cfg.Layout; got != (Layout{}) {
+		t.Errorf("Layout = %+v, want the zero value", got)
+	}
+}
+
+// TestLoadRejectsBadLayout proves the ranges a config file can be judged on are checked at
+// load: negative sizes, and a percentage that leaves the reader nothing. A width that is
+// merely too small for the terminal is not a config error; the TUI clamps that.
+func TestLoadRejectsBadLayout(t *testing.T) {
+	tests := []struct {
+		name    string
+		section string
+		wantErr string
+	}{
+		{"negative folders width", "folders_width = -1", "folders_width"},
+		{"negative messages width", "messages_width = -10", "messages_width"},
+		{"negative messages percent", "messages_percent = -5", "messages_percent"},
+		{"folders percent too large", "folders_percent = 91", "folders_percent"},
+		{"messages percent too large", "messages_percent = 100", "messages_percent"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body := validConfig + "\n[layout]\n" + tc.section + "\n"
+
+			_, err := Load(writeConfig(t, body, 0o600))
+			if err == nil {
+				t.Fatalf("Load accepted %s", tc.section)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("error %q does not name %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestLoadAcceptsLayoutBoundaries proves the largest legal percentage loads, so the range
+// is inclusive at the top rather than rejecting the documented maximum.
+func TestLoadAcceptsLayoutBoundaries(t *testing.T) {
+	body := validConfig + "\n[layout]\nmessages_percent = 90\nfolders_width = 1\n"
+
+	cfg, err := Load(writeConfig(t, body, 0o600))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Layout.MessagesPercent; got != 90 {
+		t.Errorf("MessagesPercent = %d, want 90", got)
+	}
+	if got := cfg.Layout.FoldersWidth; got != 1 {
+		t.Errorf("FoldersWidth = %d, want 1: a too-small width is the TUI's to clamp", got)
+	}
+}
