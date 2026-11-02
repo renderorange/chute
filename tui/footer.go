@@ -120,8 +120,11 @@ func packHints(b bindings, hints []footerHint, width int) string {
 }
 
 // footerHints lists the hints for the current context, in priority order: the
-// keys that prevent a mistake first (delete, flag, read, open, quit), then the
-// keys that save a keystroke. A context lists only the keys it honours.
+// keys that prevent a mistake first (delete, flag, read, open, quit). The list is
+// deliberately short — the footer is a reminder of the keys used most, not the
+// keymap, and a wall of hints is unreadable. Everything else belongs in the help
+// screen (#21). A context lists only the keys it honours, and the width budget in
+// packHints is a safety net rather than an invitation to fill it.
 func (m Model) footerHints() []footerHint {
 	switch {
 	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
@@ -170,20 +173,13 @@ func (m Model) footerHints() []footerHint {
 			hint(actionQuit, "quit"),
 			hint(actionNextThreadMessage, "next"),
 			hint(actionPrevThreadMessage, "prev"),
+			hint(actionBack, "back"),
 		}
 		if overlay, ok := m.foldersOverlayHint(); ok {
 			hints = append(hints, overlay)
 		}
 
-		return append(hints,
-			hint(actionBack, "back"),
-			hint(actionAttachments, "attach"),
-			hint(actionCompose, "compose"),
-			hint(actionReply, "reply"),
-			hint(actionReplyAll, "reply-all"),
-			hint(actionForward, "forward"),
-			hint(actionAccount, "account"),
-		)
+		return hints
 	}
 
 	hints := []footerHint{
@@ -194,28 +190,11 @@ func (m Model) footerHints() []footerHint {
 		hint(actionQuit, "quit"),
 	}
 
-	overlay, needOverlay := m.foldersOverlayHint()
-	if needOverlay {
+	if overlay, ok := m.foldersOverlayHint(); ok {
 		hints = append(hints, overlay)
 	}
 
-	rest := []footerHint{
-		hint(actionBack, "back"),
-		hint(actionCompose, "compose"),
-		hint(actionReply, "reply"),
-		hint(actionReplyAll, "reply-all"),
-		hint(actionForward, "forward"),
-		hint(actionAccount, "account"),
-		hint(actionReload, "reload"),
-		hint(actionVisualRange, "range"),
-		hint(actionAttachments, "attach"),
-	}
-	if !needOverlay {
-		rest = append(rest, hint(actionFoldersOverlay, "folders"))
-	}
-	rest = append(rest, hintPair(actionDown, actionUp, "move"), hint(actionNextPanel, "panel"))
-
-	return append(hints, rest...)
+	return hints
 }
 
 // foldersOverlayHint reports whether the folders overlay key has to outrank the

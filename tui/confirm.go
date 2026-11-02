@@ -121,10 +121,13 @@ func (m *Model) removeDeleted(uids []imap.UID) {
 	m.openUnseen = countUnread(m.messages)
 }
 
-// renderConfirmModal centres the delete confirmation in the content area.
+// renderConfirmModal centres the delete confirmation in the content area. The
+// title wears ErrorStyle, not TitleStyle: a destructive confirmation is a
+// warning, and a panel heading reads as ordinary chrome. The question and the
+// hints keep their normal styles, so only the heading is raised in pitch.
 func (m Model) renderConfirmModal(width, height int) string {
 	lines := []string{
-		TitleStyle.Render("delete"),
+		ErrorStyle.Render("delete"),
 		"",
 		fmt.Sprintf("move %s to trash?", countLabel(len(m.pendingDelete), "message")),
 		"",
@@ -133,7 +136,7 @@ func (m Model) renderConfirmModal(width, height int) string {
 
 	if m.confirmKind == confirmDiscardDraft {
 		lines = []string{
-			TitleStyle.Render("discard"),
+			ErrorStyle.Render("discard"),
 			"",
 			"discard this message? ctrl+s saves it as a draft",
 			"",
