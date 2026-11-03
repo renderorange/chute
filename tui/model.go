@@ -45,6 +45,10 @@ type Model struct {
 	status  string
 	started bool
 
+	// splash is the startup screen. It stays up until the first folder listing for
+	// the active account is handled, or until the user presses a key.
+	splash bool
+
 	folders      []mail.Folder
 	folderCursor int
 	folderScroll int
@@ -161,6 +165,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		version:          version,
 		cfg:              cfg,
 		state:            stateConnecting,
+		splash:           true,
 		sessions:         sessions,
 		loadFolders:      load.folders,
 		loadMessages:     load.messages,
@@ -301,6 +306,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.account != m.accountName() {
 			return m, nil
 		}
+
+		// The first listing ends the startup splash, success or failure: the main
+		// frame is where a refused connection is reported, not the waiting screen.
+		m.splash = false
 
 		if msg.err != nil {
 			m.state = stateFailed
@@ -525,6 +534,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey applies a single keypress.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// The startup splash is skipped by any key, as imap-notes does. The key is
+	// consumed rather than acted on, so q leaves the splash instead of quitting.
+	if m.splash {
+		m.splash = false
+
+		return m, nil
+	}
+
 	// Help is checked first: it can be opened from the main view, and closing it must
 	// not also run the action the same key has outside the overlay (esc is "back").
 	if m.helpOpen {
@@ -975,6 +992,10 @@ func (m Model) layout() Layout {
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "chute " + m.version
+	}
+
+	if m.splash {
+		return AppStyle.Render(m.renderSplash())
 	}
 
 	layout := m.layout()

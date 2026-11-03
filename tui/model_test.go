@@ -31,12 +31,18 @@ func testConfig() *config.Config {
 // sizedWith returns a model for cfg that has received a window size and whose
 // clock never fires, so no test waits on a real timer. A test that wants to
 // observe polling sets its own clock.
+//
+// The startup splash is dismissed: every caller but the splash tests wants the app
+// as it is once usable, and a real one has handled its first folder listing by then.
+// splashModel in splash_test.go builds the waiting state from New instead.
 func sizedWith(cfg *config.Config, width, height int) Model {
 	m := New(cfg, "test")
 	m.clock = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd { return nil }
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: height})
+	m = next.(Model)
+	m.splash = false
 
-	return next.(Model)
+	return m
 }
 
 // sized returns a model that has received a window size.

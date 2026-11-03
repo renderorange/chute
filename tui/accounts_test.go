@@ -186,12 +186,10 @@ func TestSwitchOpensStartFolderForNewAccount(t *testing.T) {
 	inbox := "INBOX"
 	cfg.Accounts[1].StartFolder = &inbox
 
-	m := New(cfg, "test")
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
-	m = next.(Model)
+	m := sizedWith(cfg, 140, 40)
 
 	m = openSelector(t, m)
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	switched, _ := next.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = switched.(Model)
 
