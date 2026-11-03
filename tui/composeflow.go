@@ -371,7 +371,7 @@ func (m *Model) applyDraftSaved(msg draftSavedMsg) {
 	}
 
 	if msg.err != nil {
-		m.status = "draft not saved: " + msg.err.Error()
+		m.status = "draft not saved: " + statusText(msg.err)
 		return
 	}
 
@@ -382,7 +382,7 @@ func (m *Model) applyDraftSaved(msg draftSavedMsg) {
 	case !msg.known:
 		m.status = "draft saved; this server cannot name it, so it cannot be removed after sending"
 	case msg.removeErr != nil:
-		m.status = "draft saved; the earlier copy could not be removed: " + msg.removeErr.Error()
+		m.status = "draft saved; the earlier copy could not be removed: " + statusText(msg.removeErr)
 	default:
 		m.status = "draft saved"
 	}
@@ -397,7 +397,7 @@ func (m *Model) applySendResult(msg sendResultMsg) {
 
 	switch {
 	case !msg.sent:
-		m.status = "send failed: " + msg.err.Error()
+		m.status = "send failed: " + statusText(msg.err)
 	case !msg.filed:
 		m.status = "message sent, but the copy was not filed in Sent: set [accounts.imap] sent"
 	case msg.draftKept:
@@ -420,7 +420,7 @@ func (m *Model) applyComposeLoaded(msg composeLoadedMsg) {
 	}
 
 	if msg.err != nil {
-		m.status = "draft not opened: " + msg.err.Error()
+		m.status = "draft not opened: " + statusText(msg.err)
 		return
 	}
 

@@ -66,5 +66,5 @@ func moveStatus(msg moveMsg) string {
 		return "already there"
 	}
 
-	return msg.err.Error()
+	return statusText(msg.err)
 }

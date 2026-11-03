@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
@@ -265,7 +266,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.err != nil {
 			m.state = stateFailed
-			m.status = msg.err.Error()
+			m.status = statusText(msg.err)
 			m.folders = nil
 			m.folderCursor = 0
 			m.folderScroll = 0
@@ -314,7 +315,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.msgLoading = false
 
 		if msg.err != nil {
-			m.status = msg.err.Error()
+			m.status = statusText(msg.err)
 			m.messages = nil
 			m.rows = nil
 
@@ -346,7 +347,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.markSeenOnLoad != nil {
 				delete(m.markSeenOnLoad, key)
 			}
-			m.status = msg.err.Error()
+			m.status = statusText(msg.err)
 			return m, nil
 		}
 
@@ -368,7 +369,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case attachmentSavedMsg:
 		if msg.err != nil {
-			m.status = msg.err.Error()
+			m.status = statusText(msg.err)
 			return m, nil
 		}
 		m.status = "saved " + msg.path
@@ -382,7 +383,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.err != nil {
 			if !msg.quiet {
-				m.status = msg.err.Error()
+				m.status = statusText(msg.err)
 			}
 			return m, nil
 		}
@@ -399,10 +400,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			if errors.Is(msg.err, mail.ErrAlreadyInTrash) {
+			switch {
+			case errors.Is(msg.err, mail.ErrAlreadyInTrash):
 				m.status = "already in Trash"
-			} else {
-				m.status = msg.err.Error()
+			case errors.Is(msg.err, mail.ErrNoRoleFolder):
+				m.status = "no trash folder configured"
+			default:
+				m.status = statusText(msg.err)
 			}
 
 			return m, nil
@@ -929,35 +933,98 @@ func (m Model) renderFooter() string {
 	return MutedStyle.Render(packHints(m.keys, m.footerHints(), ContentWidth(m.width)))
 }
 
-// renderStatusBar shows the account, connection state, folder count and messages.
+// statusForBar is the status as the bar shows it. Unknown errors keep their wrapped text,
+// but the account tag is already at the start of the bar, so the same account's wrapper
+// is dropped rather than spending the width on a repeated name. A mapped phrase never
+// contains it, and another account's name is left alone.
+func (m Model) statusForBar() string {
+	name := m.accountName()
+	if name == "" {
+		return m.status
+	}
+
+	return strings.ReplaceAll(m.status, fmt.Sprintf("mail: account %q: ", name), "")
+}
+
+// statusSegment is one field of the status bar. drop is the order in which it yields
+// space to a status: 1 is dropped first, 0 never. Context the user can live without goes
+// before the status, because the status is the reason they are looking at the bar.
+type statusSegment struct {
+	text string
+	drop int
+}
+
+// statusLine joins the non-empty segments in bar order.
+func statusLine(segments []statusSegment) string {
+	parts := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if segment.text != "" {
+			parts = append(parts, segment.text)
+		}
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+// renderStatusBar shows the account, connection state, folder count and messages. A
+// status, when present, outranks the context: unread, then the message count, then the
+// folder, then the folder count and the state word are dropped until it fits, and only a
+// status wider than the whole bar is truncated (GH-23 ruling).
 func (m Model) renderStatusBar() string {
-	parts := []string{"[" + m.accountName() + "]"}
+	width := ContentWidth(m.width)
+
+	segments := []statusSegment{{text: "[" + m.accountName() + "]"}}
 
 	switch m.state {
 	case stateConnecting:
-		parts = append(parts, "connecting...")
+		segments = append(segments, statusSegment{text: "connecting...", drop: 5})
 	case stateConnected:
-		parts = append(parts, countLabel(len(m.folders), "folder"))
+		segments = append(segments, statusSegment{text: countLabel(len(m.folders), "folder"), drop: 4})
 	case stateFailed:
-		parts = append(parts, "disconnected")
+		segments = append(segments, statusSegment{text: "disconnected", drop: 5})
 	}
 
 	if m.openFolder != "" {
-		parts = append(parts, m.openFolder)
+		segments = append(segments, statusSegment{text: m.openFolder, drop: 3})
 		if !m.msgLoading {
-			parts = append(parts, countLabel(len(m.messages), "message"))
+			segments = append(segments, statusSegment{text: countLabel(len(m.messages), "message"), drop: 2})
 			if m.openUnseen > 0 {
 				// "unread" is an adjective, so it does not pluralise.
-				parts = append(parts, fmt.Sprintf("%d unread", m.openUnseen))
+				segments = append(segments, statusSegment{text: fmt.Sprintf("%d unread", m.openUnseen), drop: 1})
 			}
 		}
 	}
 
 	if m.status != "" {
-		parts = append(parts, m.status)
+		segments = append(segments, statusSegment{text: m.statusForBar()})
 	}
 
-	line := Truncate(strings.Join(parts, " | "), ContentWidth(m.width))
+	line := statusLine(segments)
+
+	for m.status != "" && lipgloss.Width(line) > width {
+		dropped := false
+
+		for rank := 1; rank <= 5 && !dropped; rank++ {
+			for i := range segments {
+				if segments[i].drop == rank && segments[i].text != "" {
+					segments[i].text = ""
+					dropped = true
+
+					break
+				}
+			}
+		}
+
+		if !dropped {
+			break
+		}
+
+		line = statusLine(segments)
+	}
+
+	// Display cells, not runes: a wide-rune folder or status must not overflow the frame.
+	line = TruncateDisplay(line, width)
+
 	if m.state == stateFailed {
 		return ErrorStyle.Render(line)
 	}
