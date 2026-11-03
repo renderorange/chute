@@ -184,13 +184,13 @@ func (s *stallingIMAPServer) serve(conn net.Conn) {
 
 		switch {
 		case strings.HasPrefix(command, "CAPABILITY"):
-			fmt.Fprintf(conn, "* CAPABILITY IMAP4rev1\r\n%s OK done\r\n", tag)
+			_, _ = fmt.Fprintf(conn, "* CAPABILITY IMAP4rev1\r\n%s OK done\r\n", tag)
 
 		case strings.HasPrefix(command, "LOGIN"):
-			fmt.Fprintf(conn, "%s OK logged in\r\n", tag)
+			_, _ = fmt.Fprintf(conn, "%s OK logged in\r\n", tag)
 
 		case strings.HasPrefix(command, "SELECT"):
-			fmt.Fprintf(conn, "* 1 EXISTS\r\n* OK [UIDVALIDITY 1] valid\r\n%s OK [READ-WRITE] selected\r\n", tag)
+			_, _ = fmt.Fprintf(conn, "* 1 EXISTS\r\n* OK [UIDVALIDITY 1] valid\r\n%s OK [READ-WRITE] selected\r\n", tag)
 
 		case strings.Contains(command, "FETCH"):
 			// Announce nothing. The client is left waiting for a response that never comes,
@@ -202,12 +202,12 @@ func (s *stallingIMAPServer) serve(conn net.Conn) {
 			return
 
 		case strings.HasPrefix(command, "LOGOUT"):
-			fmt.Fprintf(conn, "* BYE\r\n%s OK bye\r\n", tag)
+			_, _ = fmt.Fprintf(conn, "* BYE\r\n%s OK bye\r\n", tag)
 
 			return
 
 		default:
-			fmt.Fprintf(conn, "%s OK done\r\n", tag)
+			_, _ = fmt.Fprintf(conn, "%s OK done\r\n", tag)
 		}
 	}
 }
