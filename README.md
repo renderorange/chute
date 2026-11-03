@@ -80,7 +80,7 @@ config is used at every terminal size.
 
 ### `[[accounts]]`
 
-One table per account. More than one is supported; `a` opens the account dialog to switch.
+One table per account. More than one is supported: `a` opens the account dialog to switch, and `]` / `[` cycle without it.
 
 | Key | Meaning |
 |---|---|
@@ -165,6 +165,8 @@ Composer keys are fixed, not part of `[keys]`:
 | `prev_panel` | `shift+tab` | Move focus to the previous pane. |
 | `reload` | `ctrl+r` | Reconnect and reload folders and the open folder. |
 | `account` | `a` | Open the account dialog. |
+| `account_next` | `]` | Switch to the next account and open its start folder. |
+| `account_prev` | `[` | Switch to the previous account. |
 | `folders_overlay` | `\` | Open the folder picker over the content. |
 | `help` | `?` | Show this keymap. |
 

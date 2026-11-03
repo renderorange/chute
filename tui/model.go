@@ -559,6 +559,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionAccount:
 		return m.openAccounts()
 
+	case actionAccountNext:
+		return m.cycleAccount(1)
+
+	case actionAccountPrev:
+		return m.cycleAccount(-1)
+
 	case actionEmptyTrash:
 		return m.beginEmptyTrash()
 

@@ -29,6 +29,8 @@ const (
 	KeyFoldersOverlay    = "folders_overlay"
 	KeyReload            = "reload"
 	KeyAccount           = "account"
+	KeyAccountNext       = "account_next"
+	KeyAccountPrev       = "account_prev"
 	KeyToggleRead        = "toggle_read"
 	KeyToggleFlag        = "toggle_flag"
 	KeyDelete            = "delete"
@@ -65,6 +67,8 @@ var keyDefaults = map[string][]string{
 	KeyFoldersOverlay:    {"\\"},
 	KeyReload:            {"ctrl+r"},
 	KeyAccount:           {"a"},
+	KeyAccountNext:       {"]"},
+	KeyAccountPrev:       {"["},
 	KeyToggleRead:        {"m"},
 	KeyToggleFlag:        {"f"},
 	KeyDelete:            {"d"},

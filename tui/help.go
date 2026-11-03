@@ -61,6 +61,7 @@ func helpGroups() []helpGroup {
 				helpAction(actionPrevPanel, "previous panel"),
 				helpAction(actionReload, "reload folders"),
 				helpAction(actionAccount, "accounts"),
+				helpPair(actionAccountPrev, actionAccountNext, "previous/next account"),
 				helpAction(actionFoldersOverlay, "folders overlay"),
 				helpAction(actionHelp, "this help"),
 			},
