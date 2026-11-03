@@ -16,6 +16,8 @@ type confirmKind int
 const (
 	confirmDelete confirmKind = iota
 	confirmDiscardDraft
+	confirmPurge
+	confirmEmptyTrash
 )
 
 // triageReady reports whether a message panel owns the selection. Without this
@@ -31,6 +33,12 @@ func (m Model) triageReady() bool {
 func (m Model) beginDelete() (tea.Model, tea.Cmd) {
 	if !m.triageReady() {
 		return m, nil
+	}
+
+	// Inside Trash the move has nowhere to go; the same key becomes the permanent
+	// delete, behind a harder confirmation.
+	if m.inTrash() {
+		return m.beginPurge()
 	}
 
 	uids := m.actionUIDs()
@@ -56,9 +64,14 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionQuit, actionBack:
 		m.confirmOpen = false
 		m.pendingDelete = nil
-		if m.confirmKind == confirmDiscardDraft {
+		m.pendingEmpty = 0
+
+		switch m.confirmKind {
+		case confirmDiscardDraft:
 			m.status = "kept editing"
-		} else {
+		case confirmPurge, confirmEmptyTrash:
+			m.status = "kept in Trash"
+		default:
 			m.status = "delete cancelled"
 		}
 
@@ -72,8 +85,22 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		uids := m.pendingDelete
+		kind := m.confirmKind
 		m.confirmOpen = false
 		m.pendingDelete = nil
+		m.pendingEmpty = 0
+
+		switch kind {
+		case confirmPurge:
+			if len(uids) == 0 {
+				return m, nil
+			}
+
+			return m, m.purgeCmd(uids)
+
+		case confirmEmptyTrash:
+			return m, m.emptyTrashCmd()
+		}
 
 		if len(uids) == 0 {
 			return m, nil
@@ -180,6 +207,25 @@ func (m Model) renderConfirmModal(width, height int) string {
 			"discard this message? ctrl+s saves it as a draft",
 			"",
 			MutedStyle.Render("enter:discard  esc:keep editing"),
+		}
+	}
+
+	switch m.confirmKind {
+	case confirmPurge:
+		lines = []string{
+			ErrorStyle.Render("delete permanently"),
+			"",
+			fmt.Sprintf("delete %s permanently? cannot be undone", countLabel(len(m.pendingDelete), "message")),
+			"",
+			MutedStyle.Render("enter:delete permanently  esc:cancel"),
+		}
+	case confirmEmptyTrash:
+		lines = []string{
+			ErrorStyle.Render("empty Trash"),
+			"",
+			fmt.Sprintf("delete all %s in Trash permanently?", countLabel(m.pendingEmpty, "message")),
+			"",
+			MutedStyle.Render("enter:empty  esc:cancel"),
 		}
 	}
 

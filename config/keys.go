@@ -43,6 +43,7 @@ const (
 	KeyArchive           = "archive"
 	KeyJunk              = "junk"
 	KeyMove              = "move"
+	KeyEmptyTrash        = "empty_trash"
 	KeyHelp              = "help"
 )
 
@@ -77,6 +78,7 @@ var keyDefaults = map[string][]string{
 	KeyArchive:           {"A"},
 	KeyJunk:              {"!"},
 	KeyMove:              {"M"},
+	KeyEmptyTrash:        {"X"},
 	KeyHelp:              {"?"},
 }
 

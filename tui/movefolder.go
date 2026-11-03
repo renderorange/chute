@@ -125,14 +125,18 @@ func folderMoveStatus(msg folderMoveMsg) string {
 	return statusText(msg.err)
 }
 
-// afterMoveSuccess applies the shared post-move list update: the moved rows leave, the
-// cursor follows its neighbour, and the confirmation is set after following because
-// opening the neighbour clears the status bar.
+// afterMoveSuccess applies the shared post-move list update.
 func (m Model) afterMoveSuccess(uids []imap.UID, dest string) (tea.Model, tea.Cmd) {
+	return m.afterRemoval(uids, fmt.Sprintf("moved %s to %s", countLabel(len(uids), "message"), dest))
+}
+
+// afterRemoval drops the rows the server confirmed gone, follows the neighbour and then
+// sets the confirmation, because opening the neighbour clears the status bar.
+func (m Model) afterRemoval(uids []imap.UID, status string) (tea.Model, tea.Cmd) {
 	m.removeMessages(uids)
 
 	next, cmd := m.followRows()
-	next.status = fmt.Sprintf("moved %s to %s", countLabel(len(uids), "message"), dest)
+	next.status = status
 
 	return next, cmd
 }

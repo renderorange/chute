@@ -23,6 +23,8 @@ type sessionClient interface {
 	StoreFlags(folder string, uids []imap.UID, add bool, flags ...imap.Flag) error
 	DeleteMessages(folder, trash string, uids []imap.UID) error
 	MoveToFolder(folder, dest string, uids []imap.UID) error
+	PurgeMessages(folder string, uids []imap.UID) error
+	EmptyFolder(folder string) error
 	Unseen(folder string) (uint32, error)
 	Poll(folder string, since imap.UID) (PollResult, error)
 	UIDs(folder string) ([]imap.UID, error)
@@ -182,6 +184,61 @@ func (s *Session) MoveToFolder(folder, dest string, uids []imap.UID) error {
 	}
 
 	if err := client.MoveToFolder(folder, target.Name, uids); err != nil {
+		s.resetLocked()
+		return err
+	}
+
+	return nil
+}
+
+// Purge permanently deletes the listed UIDs, and only from the mailbox serving the trash
+// role. The UI reaches this only inside Trash; the guard keeps a stale or programmatic
+// call from destroying mail in a normal folder.
+func (s *Session) Purge(folder string, uids []imap.UID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	trash, ok := s.roleFolderLocked(RoleTrash)
+	if !ok {
+		return fmt.Errorf("%w: account %q: no mailbox serves the trash role; set [accounts.imap] trash",
+			ErrNoRoleFolder, s.acct.Name)
+	}
+	if !strings.EqualFold(folder, trash.Name) {
+		return fmt.Errorf("mail: account %q: permanent delete is only for the trash mailbox, not %q",
+			s.acct.Name, folder)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return err
+	}
+
+	if err := client.PurgeMessages(trash.Name, uids); err != nil {
+		s.resetLocked()
+		return err
+	}
+
+	return nil
+}
+
+// EmptyTrash deletes every message in the mailbox serving the trash role. This is the one
+// place a folder-wide EXPUNGE is allowed, because the user asked for the whole folder.
+func (s *Session) EmptyTrash() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	trash, ok := s.roleFolderLocked(RoleTrash)
+	if !ok {
+		return fmt.Errorf("%w: account %q: no mailbox serves the trash role; set [accounts.imap] trash",
+			ErrNoRoleFolder, s.acct.Name)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return err
+	}
+
+	if err := client.EmptyFolder(trash.Name); err != nil {
 		s.resetLocked()
 		return err
 	}

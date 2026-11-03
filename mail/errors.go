@@ -29,4 +29,9 @@ var (
 	// Callers match it with errors.Is to distinguish "cannot file this copy" from a real
 	// protocol failure.
 	ErrNoRoleFolder = errors.New("mail: no mailbox serves the role")
+
+	// ErrNoSafePurge reports a server that cannot expunge named UIDs (no UIDPLUS), so a
+	// permanent delete of a selection would need a folder-wide EXPUNGE. Refused rather
+	// than destroying mail the user did not select.
+	ErrNoSafePurge = errors.New("mail: server cannot delete permanently")
 )

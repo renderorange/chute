@@ -33,6 +33,9 @@ func statusText(err error) string {
 
 	case errors.Is(err, mail.ErrNoMoveSupport):
 		return "server cannot move mail"
+
+	case errors.Is(err, mail.ErrNoSafePurge):
+		return "server cannot delete permanently"
 	}
 
 	return err.Error()

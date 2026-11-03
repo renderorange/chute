@@ -39,6 +39,7 @@ sentinels live in `mail/errors.go`, next to the failures. This is the split
 | Already in Trash (`mail.ErrAlreadyInTrash`) | `already in Trash` |
 | Already in the destination (`mail.ErrAlreadyInRoleFolder`) | `already in <folder>` |
 | Server advertises neither MOVE nor UIDPLUS (`mail.ErrNoMoveSupport`) | `server cannot move mail` |
+| Server cannot expunge named UIDs (`mail.ErrNoSafePurge`) | `server cannot delete permanently` |
 | Any other move/delete failure | full text |
 
 ## Composer and sending

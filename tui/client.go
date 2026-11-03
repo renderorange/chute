@@ -32,6 +32,12 @@ type moveToRoleFunc func(acct config.Account, folder string, role mail.Role, uid
 // moveToFolderFunc files messages under a mailbox the user names.
 type moveToFolderFunc func(acct config.Account, folder, dest string, uids []imap.UID) error
 
+// purgeMessagesFunc permanently deletes named UIDs from the trash mailbox.
+type purgeMessagesFunc func(acct config.Account, folder string, uids []imap.UID) error
+
+// emptyTrashFunc deletes every message in the account's trash mailbox.
+type emptyTrashFunc func(acct config.Account) error
+
 // fetchComposeFunc reads one message as an editable draft.
 type fetchComposeFunc func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error)
 
@@ -70,6 +76,8 @@ type loaders struct {
 	deleteMessages deleteMessagesFunc
 	moveToRole     moveToRoleFunc
 	moveToFolder   moveToFolderFunc
+	purgeMessages  purgeMessagesFunc
+	emptyTrash     emptyTrashFunc
 
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
@@ -105,6 +113,12 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		moveToFolder: func(acct config.Account, folder, dest string, uids []imap.UID) error {
 			return manager.For(acct).MoveToFolder(folder, dest, uids)
+		},
+		purgeMessages: func(acct config.Account, folder string, uids []imap.UID) error {
+			return manager.For(acct).Purge(folder, uids)
+		},
+		emptyTrash: func(acct config.Account) error {
+			return manager.For(acct).EmptyTrash()
 		},
 		fetchCompose: func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error) {
 			return manager.For(acct).FetchCompose(folder, uid)
