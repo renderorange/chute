@@ -24,10 +24,27 @@ type smtpDialFunc func(address string, implicitTLS bool, cfg *tls.Config) (net.C
 // SendMessage delivers msg through the account's SMTP server.
 //
 // The envelope is read from the message itself: From supplies MAIL FROM, and To plus
-// Cc supply RCPT TO. That way the envelope cannot drift from the headers, because there
-// is only one copy of each address.
+// Cc plus Bcc supply RCPT TO. That way the envelope cannot drift from the headers, because
+// there is only one copy of each address.
 func SendMessage(acct config.Account, password string, msg []byte) error {
 	return sendMessage(acct, password, msg, dialSMTP, smtpTimeout)
+}
+
+// CheckSMTP proves an account's outgoing settings: dial with the configured TLS mode, run
+// EHLO, authenticate when the server offers AUTH, then QUIT. It sends no mail — no MAIL
+// FROM, no RCPT, no DATA — because delivery belongs to SendMessage (#66).
+func CheckSMTP(acct config.Account, password string) error {
+	client, closeFn, err := openSMTP(acct, password, dialSMTP, smtpTimeout)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+
+	if err := client.Quit(); err != nil {
+		return fmt.Errorf("mail: account %q: quit: %w", acct.Name, err)
+	}
+
+	return nil
 }
 
 // dialSMTP is the production dialer: implicit TLS when the account asks for it.
@@ -40,36 +57,40 @@ func dialSMTP(address string, implicitTLS bool, cfg *tls.Config) (net.Conn, erro
 	return dialer.Dial("tcp", address)
 }
 
-// sendMessage is the whole send path, with the dialer and deadline injected.
-func sendMessage(acct config.Account, password string, msg []byte, dial smtpDialFunc, timeout time.Duration) error {
-	envelope, err := envelopeOf(msg)
-	if err != nil {
-		return fmt.Errorf("mail: account %q: %w", acct.Name, err)
-	}
-
+// openSMTP dials, negotiates TLS and authenticates. It is the half of the send path that
+// proves the server is reachable and the credential is good; CheckSMTP stops here, and
+// sendMessage continues with the envelope and DATA. The returned close function releases
+// the connection whether or not the caller logged out.
+func openSMTP(acct config.Account, password string, dial smtpDialFunc, timeout time.Duration) (*smtp.Client, func(), error) {
 	implicitTLS := acct.SMTP.UseTLS == nil || *acct.SMTP.UseTLS
 	tlsConfig := &tls.Config{ServerName: acct.SMTP.Host}
 
 	conn, err := dial(acct.SMTPAddress(), implicitTLS, tlsConfig)
 	if err != nil {
-		return fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
+		return nil, nil, fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
 	}
-	defer conn.Close()
 
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		return fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
+		conn.Close()
+		return nil, nil, fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
 	}
 
 	client, err := smtp.NewClient(conn, acct.SMTP.Host)
 	if err != nil {
-		return fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
+		conn.Close()
+		return nil, nil, fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
 	}
-	defer client.Close()
+
+	closeFn := func() {
+		client.Close()
+		conn.Close()
+	}
 
 	if !implicitTLS {
 		if ok, _ := client.Extension("STARTTLS"); ok {
 			if err := client.StartTLS(tlsConfig); err != nil {
-				return fmt.Errorf("mail: account %q: starttls: %w", acct.Name, err)
+				closeFn()
+				return nil, nil, fmt.Errorf("mail: account %q: starttls: %w", acct.Name, err)
 			}
 		}
 	}
@@ -77,9 +98,26 @@ func sendMessage(acct config.Account, password string, msg []byte, dial smtpDial
 	if ok, _ := client.Extension("AUTH"); ok {
 		auth := smtp.PlainAuth("", acct.SMTP.Username, password, acct.SMTP.Host)
 		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("%w: account %q: auth as %s: %w", ErrAuth, acct.Name, acct.SMTP.Username, err)
+			closeFn()
+			return nil, nil, fmt.Errorf("%w: account %q: auth as %s: %w", ErrAuth, acct.Name, acct.SMTP.Username, err)
 		}
 	}
+
+	return client, closeFn, nil
+}
+
+// sendMessage is the whole send path, with the dialer and deadline injected.
+func sendMessage(acct config.Account, password string, msg []byte, dial smtpDialFunc, timeout time.Duration) error {
+	envelope, err := envelopeOf(msg)
+	if err != nil {
+		return fmt.Errorf("mail: account %q: %w", acct.Name, err)
+	}
+
+	client, closeFn, err := openSMTP(acct, password, dial, timeout)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
 
 	if err := client.Mail(envelope.from); err != nil {
 		return fmt.Errorf("mail: account %q: mail from: %w", acct.Name, err)
