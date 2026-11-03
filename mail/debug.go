@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/emersion/go-imap/v2/imapclient"
 )
 
 // redacted marks where a credential was masked in the protocol log.
@@ -34,6 +36,19 @@ func withDial(dial dialFunc) Option {
 	return func(o *connectOptions) {
 		o.dial = dial
 	}
+}
+
+// WithPlaintextDial connects without TLS, for a loopback server in a test.
+//
+// Connect dials TLS and nothing else, because a mail credential over a cleartext
+// socket is a defect in production. The in-process server the suite runs against is
+// plaintext, so a test that drives the whole program — config, manager, client,
+// model — needs this seam before it can exist. It is not a configuration option: no
+// config file can reach it, so no user can turn TLS off by accident.
+func WithPlaintextDial() Option {
+	return withDial(func(address string, options *imapclient.Options) (*imapclient.Client, error) {
+		return imapclient.DialInsecure(address, options)
+	})
 }
 
 // newConnectOptions applies opts in order.
