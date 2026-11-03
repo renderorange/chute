@@ -105,6 +105,17 @@ func (c *Client) Close() error {
 	return err
 }
 
+// Abort closes the socket without logging out. Logout waits for the server's BYE, so it
+// cannot be used from a quit that must not wait; closing the connection is what unblocks a
+// command in flight (#65).
+//
+// There is no error to report: closing mid-response makes the decoder complain about the
+// response it was in the middle of, which is the expected consequence of an abort rather
+// than a failure to close.
+func (c *Client) Abort() {
+	_ = c.conn.Close()
+}
+
 // Folders lists every mailbox on the account, sorted by name.
 func (c *Client) Folders() ([]Folder, error) {
 	cmd := c.conn.List("", "*", nil)

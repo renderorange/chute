@@ -17,6 +17,7 @@ type fakeClient struct {
 	err      error
 
 	closed   bool
+	aborted  bool
 	folder   string
 	uid      imap.UID
 	requests int
@@ -101,6 +102,12 @@ func (f *fakeClient) Close() error {
 	f.closed = true
 
 	return nil
+}
+
+// Abort records the socket-only close Close uses when a command holds the lock.
+func (f *fakeClient) Abort() {
+	f.aborted = true
+	f.closed = true
 }
 
 // FetchCompose returns the canned compose value.
