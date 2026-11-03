@@ -28,6 +28,7 @@ type sessionClient interface {
 	EmptyFolder(folder string) error
 	Unseen(folder string) (uint32, error)
 	Poll(folder string, since imap.UID) (PollResult, error)
+	Search(folder string, criteria imap.SearchCriteria) ([]Message, error)
 	UIDs(folder string) ([]imap.UID, error)
 	// Abort closes the socket without logging out, for a quit that cannot wait.
 	Abort()

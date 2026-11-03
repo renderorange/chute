@@ -31,7 +31,7 @@ func (m Model) pollCmd() tea.Cmd {
 	if m.polling || m.openFolder == "" || len(m.cfg.Accounts) == 0 {
 		return nil
 	}
-	if m.accountsOpen || m.confirmOpen || m.attachOpen || m.foldersOpen || m.moveOpen || m.compose != nil {
+	if m.accountsOpen || m.confirmOpen || m.attachOpen || m.foldersOpen || m.moveOpen || m.searchOpen || m.compose != nil {
 		return nil
 	}
 
@@ -56,6 +56,12 @@ func (m Model) pollCmd() tea.Cmd {
 // removed some, so the caller then asks which survived.
 func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	m.polling = false
+
+	// A result list is transient and the folder list is still in m.messages; applying a poll
+	// here would replace the rows under the user. The next tick after esc catches up.
+	if m.searchActive {
+		return nil
+	}
 
 	if msg.account != m.accountName() || msg.folder != m.openFolder {
 		return nil

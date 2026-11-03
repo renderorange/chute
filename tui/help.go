@@ -72,7 +72,7 @@ func helpGroups() []helpGroup {
 				helpPair(actionUp, actionDown, "move"),
 				helpPair(actionTop, actionBottom, "first/last"),
 				helpAction(actionOpen, "open"),
-				helpAction(actionFilter, "filter"),
+				helpPair(actionFilter, actionSearch, "filter / search"),
 				helpAction(actionVisualRange, "select range"),
 				helpAction(actionDelete, "delete"),
 				helpAction(actionArchive, "archive"),

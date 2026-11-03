@@ -34,6 +34,9 @@ func (m Model) beginDelete() (tea.Model, tea.Cmd) {
 	if !m.triageReady() {
 		return m, nil
 	}
+	if next, blocked := m.resultsOnly(); blocked {
+		return next, nil
+	}
 
 	// Inside Trash the move has nowhere to go; the same key becomes the permanent
 	// delete, behind a harder confirmation.

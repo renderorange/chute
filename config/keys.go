@@ -47,6 +47,7 @@ const (
 	KeyMove              = "move"
 	KeyEmptyTrash        = "empty_trash"
 	KeyCollapse          = "collapse"
+	KeySearch            = "search"
 	KeyHelp              = "help"
 )
 
@@ -85,6 +86,7 @@ var keyDefaults = map[string][]string{
 	KeyMove:              {"M"},
 	KeyEmptyTrash:        {"X"},
 	KeyCollapse:          {"z"},
+	KeySearch:            {"S"},
 	KeyHelp:              {"?"},
 }
 

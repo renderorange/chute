@@ -49,6 +49,9 @@ type fakeClient struct {
 	appendErr   error
 	appendUID   imap.UID
 
+	searchFolder   string
+	searchCriteria imap.SearchCriteria
+
 	unseen     uint32
 	unseenErr  error
 	unseenSeen []string
@@ -238,6 +241,19 @@ func (f *fakeClient) EmptyFolder(folder string) error {
 	}
 
 	return f.err
+}
+
+// Search records the criteria a session ran and returns the canned messages.
+func (f *fakeClient) Search(folder string, criteria imap.SearchCriteria) ([]Message, error) {
+	f.requests++
+	f.searchFolder = folder
+	f.searchCriteria = criteria
+
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.messages, nil
 }
 
 // StoreFlags records the call so session tests can assert one UID set reached
