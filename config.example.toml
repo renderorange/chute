@@ -1,0 +1,86 @@
+# chute example configuration.
+#
+# Copy this file to ~/.config/chute/config.toml, make it mode 0600, and replace the
+# placeholders. Every value below is legal as written, so `chute -check` is the only step
+# that needs real credentials.
+#
+# The file holds credentials: chute refuses to read it unless it is 0600, unless
+# general.unsafe_config is true.
+
+[general]
+# Seconds between incremental new-mail checks. 0 means the default, 60.
+poll_interval = 60
+
+# Where attachments are saved. A leading ~ is expanded. Empty means ~/Downloads.
+download_dir = "~/Downloads"
+
+# Where the cursor starts in a reply: "top" writes above the quoted original,
+# "bottom" below it.
+reply_position = "top"
+
+# Skips the 0600 permission check. Leave false unless the credentials live elsewhere.
+unsafe_config = false
+
+[layout]
+# Pane widths. 0 means automatic. A width wins over the percentage for its pane.
+# Percentages must be 0..90, because the reader needs the remainder.
+folders_percent = 0
+messages_percent = 55
+folders_width = 28
+messages_width = 0
+
+[list]
+# Message-list columns, in draw order. Accepted: "from", "subject", "size", "date".
+# "subject" is required because it absorbs the leftover width. The shipped order is
+# ["from", "subject", "date"]; add "size" for a right-aligned byte count.
+columns = ["from", "subject", "size", "date"]
+
+# A Go reference layout. Must render in at most 16 cells. Empty means "Jan 02".
+date_format = "Jan 02"
+
+[[accounts]]
+name = "example"
+default = true
+
+# The From header. Needed when the login address is not the address you send as.
+from = "Your Name <you@example.com>"
+
+# Opened automatically after the first folder load. Unset means INBOX; "" disables it.
+start_folder = "INBOX"
+
+[accounts.imap]
+host = "imap.example.com"
+port = 993
+username = "you@example.com"
+
+# Exactly one credential source per section: a literal password, or a command whose
+# first line is the password. The command form keeps the secret out of this file.
+password_command = "pass show mail/example"
+
+# true or unset dials implicit TLS (default port 993). false dials a plaintext
+# connection and requires STARTTLS (default port 143); there is no plaintext-login mode.
+use_tls = true
+
+# Special-use mailboxes, overriding what the server advertises. Remove the lines to let
+# detection work.
+sent = "Sent"
+drafts = "Drafts"
+trash = "Trash"
+archive = "Archive"
+junk = "Junk"
+
+# Mailbox names to leave out of the folder list; their subfolders are hidden too.
+hide_folders = ["Newsletters"]
+
+[accounts.smtp]
+# host, username, password and password_command default to the IMAP values when unset.
+host = "smtp.example.com"
+port = 465
+username = "you@example.com"
+password_command = "pass show mail/example"
+use_tls = true
+
+[keys]
+# Override any action from the README's key table. An override replaces the shipped
+# keys rather than adding to them, and a key may belong to only one action.
+# move = ["M"]
