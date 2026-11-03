@@ -145,6 +145,49 @@ func (m Model) listColumns() []string {
 	return m.cfg.List.ColumnOrder()
 }
 
+// formatListSize renders a byte count for the size column: binary units, no space, and
+// one decimal below 100 units. The units match formatSize's, so one message reads the
+// same in the list and in the attachment list (#63).
+func formatListSize(n int64) string {
+	if n < 0 {
+		n = 0
+	}
+	if n < 1024 {
+		return fmt.Sprintf("%dB", n)
+	}
+
+	value := float64(n)
+	unit := "K"
+
+	for _, candidate := range []string{"K", "M", "G"} {
+		unit = candidate
+		value /= 1024
+		if value < 1024 {
+			break
+		}
+	}
+
+	// At 100 units and above the decimal only buys a rounding artefact ("1024.0K"); below
+	// it, "12.3K" and "6.8M" are worth the cell.
+	if value < 100 {
+		return fmt.Sprintf("%.1f%s", value, unit)
+	}
+
+	return fmt.Sprintf("%.0f%s", value, unit)
+}
+
+// sizeCell right-aligns the size in its fixed column. A value past the cap loses leading
+// digits rather than widening the row, which would wrap the list.
+func sizeCell(n int64) string {
+	value := formatListSize(n)
+	if width := lipgloss.Width(value); width > config.ListMaxSizeCells {
+		runes := []rune(value)
+		value = string(runes[len(runes)-config.ListMaxSizeCells:])
+	}
+
+	return strings.Repeat(" ", config.ListMaxSizeCells-lipgloss.Width(value)) + value
+}
+
 // messageLine renders one message row: markers, then the configured columns in order,
 // with the subject absorbing whatever width is left.
 func (m Model) messageLine(index, width int) string {
@@ -183,6 +226,8 @@ func (m Model) messageLine(index, width int) string {
 		switch col {
 		case config.ListColumnFrom:
 			fixed[col] = clamp(width/4, 10, 20)
+		case config.ListColumnSize:
+			fixed[col] = config.ListMaxSizeCells
 		case config.ListColumnDate:
 			fixed[col] = lipgloss.Width(date)
 		}
@@ -222,6 +267,8 @@ func (m Model) messageLine(index, width int) string {
 			row.WriteString(padColumn(singleLine(msg.From()), fixed[col]))
 		case config.ListColumnSubject:
 			row.WriteString(padColumn(subject, subjectWidth))
+		case config.ListColumnSize:
+			row.WriteString(sizeCell(msg.Size))
 		case config.ListColumnDate:
 			row.WriteString(date)
 		}
