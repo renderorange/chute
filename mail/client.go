@@ -19,19 +19,37 @@ type Client struct {
 	caps    imap.CapSet
 }
 
-// Connect opens a TLS connection and logs in. The password is used once and is
-// retained only to mask itself in the debug stream, if one was requested.
+// Connect opens the account's IMAP connection in the TLS mode the config asks for:
+// unset or true dials implicit TLS, false dials plaintext and upgrades with STARTTLS
+// before LOGIN. There is no plaintext-credentials mode; a server that cannot STARTTLS
+// is refused rather than sent the password.
 func Connect(acct config.Account, password string, opts ...Option) (*Client, error) {
-	return connectWith(dialTLS, acct, password, opts...)
+	return connectWith(imapDialer(acct), acct, password, opts...)
+}
+
+// imapDialer selects the production dialer for an account's [accounts.imap] use_tls.
+func imapDialer(acct config.Account) dialFunc {
+	if acct.IMAP.UseTLS != nil && !*acct.IMAP.UseTLS {
+		return dialStartTLS
+	}
+
+	return dialTLS
 }
 
 // dialFunc opens a protocol connection for config tests and for the in-process
 // server the suite runs against.
 type dialFunc func(address string, options *imapclient.Options) (*imapclient.Client, error)
 
-// dialTLS is the production dialer.
+// dialTLS is the implicit-TLS dialer (port 993, or any port the user points it at).
 func dialTLS(address string, options *imapclient.Options) (*imapclient.Client, error) {
 	return imapclient.DialTLS(address, options)
+}
+
+// dialStartTLS is the use_tls = false dialer: a plaintext connection upgraded with
+// STARTTLS before the login. The upgrade is mandatory, not opportunistic, because
+// falling back would put the credential on the wire in the clear.
+func dialStartTLS(address string, options *imapclient.Options) (*imapclient.Client, error) {
+	return imapclient.DialStartTLS(address, options)
 }
 
 // connectWith opens a connection through dial, logs in and caches the

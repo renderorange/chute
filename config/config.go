@@ -15,8 +15,9 @@ import (
 
 // Default ports for the two protocols chute speaks.
 const (
-	DefaultIMAPPort = 993
-	DefaultSMTPPort = 465
+	DefaultIMAPPort         = 993
+	DefaultIMAPStartTLSPort = 143
+	DefaultSMTPPort         = 465
 )
 
 // privateMode is the only file mode accepted for a config holding credentials.
@@ -144,7 +145,11 @@ type IMAP struct {
 	Username        string `toml:"username"`
 	Password        string `toml:"password"`
 	PasswordCommand string `toml:"password_command"`
-	UseTLS          *bool  `toml:"use_tls"`
+
+	// UseTLS selects the transport: unset or true dials implicit TLS (default port
+	// 993); false dials plaintext and requires STARTTLS (default port 143). There is no
+	// plaintext-credentials mode: a server that cannot STARTTLS is refused.
+	UseTLS *bool `toml:"use_tls"`
 
 	// Sent, Drafts, Trash, Archive and Junk override IMAP special-use detection.
 	Sent    string `toml:"sent"`
@@ -214,11 +219,17 @@ func (c *Config) applyDefaults() {
 
 	for i := range c.Accounts {
 		is := &c.Accounts[i].IMAP
-		if is.Port == 0 {
-			is.Port = DefaultIMAPPort
-		}
 		if is.UseTLS == nil {
 			is.UseTLS = boolPtr(true)
+		}
+		if is.Port == 0 {
+			// The port follows the mode unless the user set one, so use_tls = false
+			// with no port does not dial STARTTLS at 993.
+			if *is.UseTLS {
+				is.Port = DefaultIMAPPort
+			} else {
+				is.Port = DefaultIMAPStartTLSPort
+			}
 		}
 
 		sm := &c.Accounts[i].SMTP

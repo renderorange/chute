@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"crypto/tls"
 	"net"
 	"strconv"
 	"strings"
@@ -69,6 +70,22 @@ func newTestServer(t *testing.T, caps imap.CapSet) *testServer {
 func newTestServerWith(t *testing.T, caps imap.CapSet, username, password string) *testServer {
 	t.Helper()
 
+	return newTestServerTLS(t, caps, username, password, nil)
+}
+
+// newStartTLSServer starts a plaintext listener whose server offers STARTTLS, so the
+// use_tls = false branch can be driven end to end.
+func newStartTLSServer(t *testing.T, caps imap.CapSet) *testServer {
+	t.Helper()
+
+	return newTestServerTLS(t, caps, "tester", "secret", selfSignedTLSConfig(t))
+}
+
+// newTestServerTLS starts the backing server; a non-nil TLSConfig makes it offer
+// STARTTLS on an otherwise plaintext listener.
+func newTestServerTLS(t *testing.T, caps imap.CapSet, username, password string, tlsConfig *tls.Config) *testServer {
+	t.Helper()
+
 	backend := imapmemserver.New()
 	user := imapmemserver.NewUser(username, password)
 	if err := user.Create("INBOX", nil); err != nil {
@@ -88,6 +105,7 @@ func newTestServerWith(t *testing.T, caps imap.CapSet, username, password string
 		Caps:         caps,
 		InsecureAuth: true,
 		DebugWriter:  log,
+		TLSConfig:    tlsConfig,
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

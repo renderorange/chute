@@ -498,3 +498,22 @@ func TestLoadAcceptsLayoutBoundaries(t *testing.T) {
 		t.Errorf("FoldersWidth = %d, want 1: a too-small width is the TUI's to clamp", got)
 	}
 }
+
+// TestIMAPDefaultPortFollowsTLSMode pins #60's other half: use_tls = false with no port
+// means 143, not 993, so the setting does not point STARTTLS at the TLS port.
+func TestIMAPDefaultPortFollowsTLSMode(t *testing.T) {
+	no := false
+
+	cfg := &Config{Accounts: []Account{
+		{Name: "implicit", IMAP: IMAP{Host: "a.example", Username: "u", Password: "p"}},
+		{Name: "starttls", IMAP: IMAP{Host: "b.example", Username: "u", Password: "p", UseTLS: &no}},
+		{Name: "explicit", IMAP: IMAP{Host: "c.example", Username: "u", Password: "p", Port: 1993, UseTLS: &no}},
+	}}
+	cfg.applyDefaults()
+
+	for i, want := range []int{DefaultIMAPPort, DefaultIMAPStartTLSPort, 1993} {
+		if got := cfg.Accounts[i].IMAP.Port; got != want {
+			t.Errorf("%s: port = %d, want %d", cfg.Accounts[i].Name, got, want)
+		}
+	}
+}
