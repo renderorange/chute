@@ -109,6 +109,13 @@ type Model struct {
 	helpOpen   bool
 	helpScroll int
 
+	// settingsOpen is the read-only settings report; settingsScroll is its first visible
+	// line. configPath and debugPath are what main was started with (#67).
+	settingsOpen   bool
+	settingsScroll int
+	configPath     string
+	debugPath      string
+
 	// selection is the last account and folder, remembered across restarts, and
 	// saveState persists it. A nil writer means this model keeps no state.
 	selection config.State
@@ -519,6 +526,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.helpOpen {
 		return m.handleHelpKey(msg)
 	}
+	if m.settingsOpen {
+		return m.handleSettingsKey(msg)
+	}
 	if m.accountsOpen {
 		return m.handleAccountsKey(msg)
 	}
@@ -596,6 +606,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionSearch:
 		return m.beginSearch()
+
+	case actionSettings:
+		return m.openSettings()
 
 	case actionHelp:
 		m.helpOpen = true
@@ -965,6 +978,10 @@ func (m Model) View() string {
 	switch {
 	case m.helpOpen:
 		if modal := m.renderHelpOverlay(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
+	case m.settingsOpen:
+		if modal := m.renderSettingsModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal
 		}
 	case m.confirmOpen:

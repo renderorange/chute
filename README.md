@@ -169,6 +169,7 @@ Composer keys are fixed, not part of `[keys]`:
 | `account_prev` | `[` | Switch to the previous account. |
 | `folders_overlay` | `\` | Open the folder picker over the content. |
 | `help` | `?` | Show this keymap. |
+| `settings` | `,` | Read-only report of the effective account, roles, layout, list, keys and paths. |
 
 ### List
 

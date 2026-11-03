@@ -63,7 +63,7 @@ func helpGroups() []helpGroup {
 				helpAction(actionAccount, "accounts"),
 				helpPair(actionAccountPrev, actionAccountNext, "previous/next account"),
 				helpAction(actionFoldersOverlay, "folders overlay"),
-				helpAction(actionHelp, "this help"),
+				helpPair(actionHelp, actionSettings, "help / settings"),
 			},
 		},
 		{

@@ -52,7 +52,8 @@ func main() {
 	}
 
 	model := tui.New(cfg, version, mailOptions...).
-		WithSelection(config.LoadState(), config.SaveState)
+		WithSelection(config.LoadState(), config.SaveState).
+		WithPaths(*configPath, *debugPath)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, runErr := program.Run()

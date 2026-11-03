@@ -63,13 +63,9 @@ func readmeActionRows(t *testing.T, readme string) map[string][]string {
 		}
 
 		name := strings.Trim(strings.TrimSpace(cells[1]), "`")
-		keys := make([]string, 0, 2)
-
-		for _, key := range strings.Split(cells[2], ",") {
-			if key = strings.Trim(strings.TrimSpace(key), "`"); key != "" {
-				keys = append(keys, key)
-			}
-		}
+		// Read the backticked keys rather than splitting on commas: one shipped key is a
+		// comma, and a plain split would turn "," into two empty keys.
+		keys := backtickedKeys(cells[2])
 
 		if len(keys) == 0 {
 			t.Errorf("%s: action %q lists no default keys", readmePath, name)
@@ -83,6 +79,31 @@ func readmeActionRows(t *testing.T, readme string) map[string][]string {
 	}
 
 	return rows
+}
+
+// backtickedKeys returns every `key` literal in a table cell, in order.
+func backtickedKeys(cell string) []string {
+	keys := make([]string, 0, 2)
+
+	for {
+		open := strings.Index(cell, "`")
+		if open < 0 {
+			return keys
+		}
+
+		rest := cell[open+1:]
+
+		close := strings.Index(rest, "`")
+		if close < 0 {
+			return keys
+		}
+
+		if key := strings.TrimSpace(rest[:close]); key != "" {
+			keys = append(keys, key)
+		}
+
+		cell = rest[close+1:]
+	}
 }
 
 // TestReadmeKeyTableMatchesTheKeymap is the M6 gate made mechanical: the documented keys
