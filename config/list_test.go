@@ -43,6 +43,22 @@ columns = ["date", "subject"]
 	}
 }
 
+// TestListAcceptsTheSizeColumn is #63: the vocabulary gained the one column the wire
+// already pays for, without changing the shipped order.
+func TestListAcceptsTheSizeColumn(t *testing.T) {
+	cfg, err := Load(writeConfig(t, listConfig(`
+columns = ["from", "subject", "size", "date"]
+`), 0o600))
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	want := []string{ListColumnFrom, ListColumnSubject, ListColumnSize, ListColumnDate}
+	if got := cfg.List.ColumnOrder(); !equalStrings(got, want) {
+		t.Errorf("columns = %v, want %v", got, want)
+	}
+}
+
 // TestListZeroValueUsesDefaults proves a hand-built config (every test in the tree)
 // renders the shipped row without a [list] table.
 func TestListZeroValueUsesDefaults(t *testing.T) {
@@ -63,8 +79,8 @@ func TestListValidation(t *testing.T) {
 	}{
 		{
 			name: "unknown column",
-			body: `columns = ["from", "subject", "size"]`,
-			want: `"size"`,
+			body: `columns = ["from", "subject", "flags"]`,
+			want: `"flags"`,
 		},
 		{
 			name: "duplicate column",

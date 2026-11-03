@@ -84,6 +84,7 @@ func TestMessageLineWidthWithCustomColumns(t *testing.T) {
 		{config.ListColumnDate, config.ListColumnFrom, config.ListColumnSubject},
 		{config.ListColumnSubject, config.ListColumnFrom, config.ListColumnDate},
 		{config.ListColumnFrom, config.ListColumnSubject},
+		{config.ListColumnFrom, config.ListColumnSubject, config.ListColumnSize, config.ListColumnDate},
 	}
 
 	for _, order := range orders {
@@ -120,6 +121,79 @@ func TestMessageLineSurvivesAWideDateLiteral(t *testing.T) {
 	}
 }
 
+// sizeModel is listModel with one message of a given size, so the size column can be
+// rendered against the real row builder.
+func sizeModel(size int64, cols []string) Model {
+	m := listModel(cols, "")
+	m.messages[0].Size = size
+	m.rows = BuildRows(m.messages)
+
+	return m
+}
+
+// TestSizeColumnRendersTheByteCount is #63's acceptance list: the five sizes the issue
+// names, rendered where the config puts them.
+func TestSizeColumnRendersTheByteCount(t *testing.T) {
+	cols := []string{config.ListColumnFrom, config.ListColumnSubject, config.ListColumnSize, config.ListColumnDate}
+
+	for _, tc := range []struct {
+		name string
+		size int64
+		want string
+	}{
+		{"empty", 0, "0B"},
+		{"bytes", 999, "999B"},
+		{"kilobytes", 1536, "1.5K"},
+		{"megabytes", 2 * 1024 * 1024, "2.0M"},
+		{"gigabytes", 1288490188, "1.2G"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			line := sizeModel(tc.size, cols).messageLine(0, 60)
+
+			if !strings.Contains(line, tc.want) {
+				t.Errorf("row is missing %q: %q", tc.want, line)
+			}
+			if got := lipgloss.Width(line); got != 60 {
+				t.Errorf("row is %d cells, want 60: %q", got, line)
+			}
+		})
+	}
+}
+
+// TestSizeColumnWorksWithoutTheDate proves the size column does not depend on the date
+// being present, which is how a narrow layout would use it.
+func TestSizeColumnWorksWithoutTheDate(t *testing.T) {
+	line := sizeModel(1536, []string{config.ListColumnFrom, config.ListColumnSubject, config.ListColumnSize}).messageLine(0, 44)
+
+	if !strings.Contains(line, "1.5K") {
+		t.Errorf("row is missing the size: %q", line)
+	}
+	if got := lipgloss.Width(line); got != 44 {
+		t.Errorf("row is %d cells, want 44: %q", got, line)
+	}
+}
+
+// TestSizeCellIsRightAlignedAndCapped pins the cell itself: fixed width, value flush
+// right, and a value past the cap loses leading digits rather than widening the row.
+func TestSizeCellIsRightAlignedAndCapped(t *testing.T) {
+	for _, tc := range []struct {
+		size int64
+		want string
+	}{
+		{0, "    0B"},
+		{999, "  999B"},
+		{1536, "  1.5K"},
+	} {
+		if got := sizeCell(tc.size); got != tc.want {
+			t.Errorf("sizeCell(%d) = %q, want %q", tc.size, got, tc.want)
+		}
+	}
+
+	if got := lipgloss.Width(sizeCell(1 << 50)); got != config.ListMaxSizeCells {
+		t.Errorf("an oversized value renders %d cells, want %d", got, config.ListMaxSizeCells)
+	}
+}
+
 // TestMessageLineDefaultColumnsAreUnchanged pins the shipped row's shape, so the
 // generalization cannot quietly move the sender, the gap or the date.
 func TestMessageLineDefaultColumnsAreUnchanged(t *testing.T) {
@@ -138,6 +212,14 @@ func TestMessageLineDefaultColumnsAreUnchanged(t *testing.T) {
 	if !strings.Contains(line, "   Oct 29") {
 		t.Errorf("row lost the three-cell gap before the date: %q", line)
 	}
+
+	// Exact shape: 3 marker cells, the sender clamped to 53/4=13, a 1-cell gap, the
+	// subject taking the rest at 26, the 3-cell date gap and the 6-cell date.
+	want := ">  " + "Sender" + strings.Repeat(" ", 7) + " " +
+		"subject 01" + strings.Repeat(" ", 16) + "   " + "Oct 29"
+	if line != want {
+		t.Errorf("shipped row changed:\ngot  %q\nwant %q", line, want)
+	}
 }
 
 // TestFrameAtTheTabletSizeWithEachListConfig is the whole-frame invariant at the
@@ -151,6 +233,7 @@ func TestFrameAtTheTabletSizeWithEachListConfig(t *testing.T) {
 		{name: "default"},
 		{name: "date first", list: config.List{Columns: []string{config.ListColumnDate, config.ListColumnFrom, config.ListColumnSubject}}},
 		{name: "no date", list: config.List{Columns: []string{config.ListColumnFrom, config.ListColumnSubject}}},
+		{name: "size", list: config.List{Columns: []string{config.ListColumnFrom, config.ListColumnSubject, config.ListColumnSize, config.ListColumnDate}}},
 		{name: "iso date", list: config.List{DateFormat: "2006-01-02"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

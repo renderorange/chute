@@ -13,6 +13,7 @@ import (
 const (
 	ListColumnFrom    = "from"
 	ListColumnSubject = "subject"
+	ListColumnSize    = "size"
 	ListColumnDate    = "date"
 )
 
@@ -25,6 +26,11 @@ const ListDateFormat = "Jan 02"
 // twice as wide as it is long.
 const ListMaxDateCells = 16
 
+// ListMaxSizeCells caps the size column. The formatter never needs more than six
+// ("1023M"); the cap is the renderer's guarantee, and a value past it loses leading
+// digits rather than widening the row.
+const ListMaxSizeCells = 6
+
 // listReferenceTime is the moment a configured layout is rendered against when the
 // config is validated: the Go reference date, so every verb in the layout is
 // exercised. It is fixed rather than "now" so a load error cannot depend on the day.
@@ -33,8 +39,9 @@ var listReferenceTime = time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC)
 // List configures the message-list row: which columns appear and in what order, and
 // how the date column is formatted.
 type List struct {
-	// Columns is the order to draw. Omitting "date" hides the date column; "subject"
-	// is required because it is the column that absorbs the leftover width.
+	// Columns is the order to draw. Omitting a column hides it; "subject" is required
+	// because it is the column that absorbs the leftover width. The vocabulary is from,
+	// subject, size and date, and the shipped order is from, subject, date.
 	Columns []string `toml:"columns"`
 
 	// DateFormat is a Go reference layout. Empty means the shipped "Jan 02".
@@ -79,10 +86,10 @@ func (l *List) validate() error {
 		name = strings.ToLower(strings.TrimSpace(name))
 
 		switch name {
-		case ListColumnFrom, ListColumnSubject, ListColumnDate:
+		case ListColumnFrom, ListColumnSubject, ListColumnSize, ListColumnDate:
 		default:
-			return fmt.Errorf("config: [list] columns[%d] is %q, want %q, %q or %q",
-				i, name, ListColumnFrom, ListColumnSubject, ListColumnDate)
+			return fmt.Errorf("config: [list] columns[%d] is %q, want %q, %q, %q or %q",
+				i, name, ListColumnFrom, ListColumnSubject, ListColumnSize, ListColumnDate)
 		}
 
 		if seen[name] {
