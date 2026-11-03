@@ -156,6 +156,52 @@ func (s *Session) MoveTo(folder string, role Role, uids []imap.UID) (string, err
 	return dest.Name, nil
 }
 
+// MoveToFolder files messages under a mailbox the user named, resolved from the last
+// unfiltered folder listing. It is the arbitrary-destination path behind the move
+// picker; by-name resolution is case-insensitive and refuses a mailbox the server marked
+// \Noselect, because a container cannot hold messages. The protocol choice stays in
+// Client.MoveToFolder, so a named move cannot drift from delete's policy.
+func (s *Session) MoveToFolder(folder, dest string, uids []imap.UID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	target, ok := s.folderNamedLocked(dest)
+	if !ok {
+		return fmt.Errorf("mail: account %q: no mailbox named %q", s.acct.Name, dest)
+	}
+	if !target.Selectable() {
+		return fmt.Errorf("mail: account %q: %q cannot hold messages", s.acct.Name, target.Name)
+	}
+	if strings.EqualFold(folder, target.Name) {
+		return fmt.Errorf("%w: account %q: %q", ErrAlreadyInRoleFolder, s.acct.Name, folder)
+	}
+
+	client, err := s.acquireLocked()
+	if err != nil {
+		return err
+	}
+
+	if err := client.MoveToFolder(folder, target.Name, uids); err != nil {
+		s.resetLocked()
+		return err
+	}
+
+	return nil
+}
+
+// folderNamedLocked resolves a user-named mailbox against the unfiltered listing.
+func (s *Session) folderNamedLocked(name string) (Folder, bool) {
+	name = strings.TrimSpace(name)
+
+	for _, folder := range s.folders {
+		if strings.EqualFold(folder.Name, name) {
+			return folder, true
+		}
+	}
+
+	return Folder{}, false
+}
+
 // roleOverride maps a role onto the account's configured mailbox override. The
 // inbox has none; StartFolder covers that case.
 func roleOverride(acct config.Account, role Role) string {

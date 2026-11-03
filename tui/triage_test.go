@@ -79,10 +79,10 @@ func TestRebindingChangesDispatch(t *testing.T) {
 	m, store := withTriage(t, sampleMessages(2))
 
 	keys := defaultBindings()
-	keys[actionToggleRead] = []string{"M"}
+	keys[actionToggleRead] = []string{"z"}
 	m.keys = keys
 
-	next, cmd := m.Update(keyMsg("M"))
+	next, cmd := m.Update(keyMsg("z"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("the rebound key did not dispatch the action")

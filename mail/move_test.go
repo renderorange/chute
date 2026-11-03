@@ -176,6 +176,90 @@ func TestSessionMoveToResolvesTheRole(t *testing.T) {
 	}
 }
 
+// TestSessionMoveToNamedFolderResolvesIt proves the arbitrary-destination path resolves
+// against the last listing and hands one destination and one UID set to the client.
+func TestSessionMoveToNamedFolderResolvesIt(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "Projects", Delimiter: '/'},
+	}}
+	session := newMoveSession(t, config.Account{Name: "fastmail"}, client)
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	if err := session.MoveToFolder("INBOX", "projects", []imap.UID{4, 5}); err != nil {
+		t.Fatalf("MoveToFolder: %v", err)
+	}
+	if client.moveFolder != "INBOX" || client.moveDest != "Projects" {
+		t.Errorf("client got %q -> %q, want INBOX -> Projects", client.moveFolder, client.moveDest)
+	}
+	if fmt.Sprint(client.moveUIDs) != "[4 5]" {
+		t.Errorf("uids = %v, want [4 5]", client.moveUIDs)
+	}
+}
+
+// TestSessionMoveToNamedFolderRefusesUnknown keeps a stale picker from reaching the
+// server with a mailbox that no longer exists.
+func TestSessionMoveToNamedFolderRefusesUnknown(t *testing.T) {
+	client := &fakeClient{folders: []Folder{{Name: "INBOX", Delimiter: '/'}}}
+	session := newMoveSession(t, config.Account{Name: "fastmail"}, client)
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	err := session.MoveToFolder("INBOX", "Nowhere", []imap.UID{1})
+	if err == nil || !strings.Contains(err.Error(), "Nowhere") {
+		t.Fatalf("error = %v, want a message naming the missing mailbox", err)
+	}
+	if client.moveFolder != "" {
+		t.Error("the client was asked to move to a mailbox that is not in the listing")
+	}
+}
+
+// TestSessionMoveToNamedFolderRefusesNoSelect covers the \Noselect flag: a container
+// mailbox is not a destination.
+func TestSessionMoveToNamedFolderRefusesNoSelect(t *testing.T) {
+	client := &fakeClient{folders: []Folder{
+		{Name: "INBOX", Delimiter: '/'},
+		{Name: "All Mail", Delimiter: '/', Attrs: []imap.MailboxAttr{imap.MailboxAttrNoSelect}},
+	}}
+	session := newMoveSession(t, config.Account{Name: "fastmail"}, client)
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	err := session.MoveToFolder("INBOX", "All Mail", []imap.UID{1})
+	if err == nil || !strings.Contains(err.Error(), "cannot hold messages") {
+		t.Fatalf("error = %v, want the \\Noselect refusal", err)
+	}
+	if client.moveFolder != "" {
+		t.Error("the client was asked to move into a \\Noselect mailbox")
+	}
+}
+
+// TestSessionMoveToNamedFolderRefusesTheSource is the typed guard the UI maps to
+// "already in <dest>".
+func TestSessionMoveToNamedFolderRefusesTheSource(t *testing.T) {
+	client := &fakeClient{folders: []Folder{{Name: "INBOX", Delimiter: '/'}}}
+	session := newMoveSession(t, config.Account{Name: "fastmail"}, client)
+
+	if _, err := session.Folders(); err != nil {
+		t.Fatalf("Folders: %v", err)
+	}
+
+	err := session.MoveToFolder("inbox", "INBOX", []imap.UID{1})
+	if !errors.Is(err, ErrAlreadyInRoleFolder) {
+		t.Fatalf("error = %v, want ErrAlreadyInRoleFolder", err)
+	}
+	if client.moveFolder != "" {
+		t.Error("the client was asked to move a folder into itself")
+	}
+}
+
 // TestSessionMoveToJunkResolvesTheRole covers the second role rather than assuming the
 // first one proves both.
 func TestSessionMoveToJunkResolvesTheRole(t *testing.T) {

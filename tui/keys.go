@@ -36,6 +36,7 @@ const (
 	actionForward
 	actionArchive
 	actionJunk
+	actionMove
 	actionHelp
 )
 
@@ -69,6 +70,7 @@ var actionNames = map[action]string{
 	actionForward:           config.KeyForward,
 	actionArchive:           config.KeyArchive,
 	actionJunk:              config.KeyJunk,
+	actionMove:              config.KeyMove,
 	actionHelp:              config.KeyHelp,
 }
 

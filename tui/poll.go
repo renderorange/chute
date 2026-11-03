@@ -31,7 +31,7 @@ func (m Model) pollCmd() tea.Cmd {
 	if m.polling || m.openFolder == "" || len(m.cfg.Accounts) == 0 {
 		return nil
 	}
-	if m.accountsOpen || m.confirmOpen || m.attachOpen || m.foldersOpen || m.compose != nil {
+	if m.accountsOpen || m.confirmOpen || m.attachOpen || m.foldersOpen || m.moveOpen || m.compose != nil {
 		return nil
 	}
 

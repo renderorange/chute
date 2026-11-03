@@ -69,6 +69,10 @@ type Model struct {
 	foldersOpen         bool
 	folderOverlayCursor int
 
+	moveOpen    bool
+	moveCursor  int
+	moveFolders []mail.Folder
+
 	accountsOpen  bool
 	accountCursor int
 	unseen        map[string]uint32
@@ -106,6 +110,7 @@ type Model struct {
 	storeFlags       storeFlagsFunc
 	deleteMessages   deleteMessagesFunc
 	moveToRole       moveToRoleFunc
+	moveToFolder     moveToFolderFunc
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
 	appendSent       appendSentFunc
@@ -135,6 +140,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		storeFlags:       load.storeFlags,
 		deleteMessages:   load.deleteMessages,
 		moveToRole:       load.moveToRole,
+		moveToFolder:     load.moveToFolder,
 		fetchCompose:     load.fetchCompose,
 		saveDraft:        load.saveDraft,
 		appendSent:       load.appendSent,
@@ -432,14 +438,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.removeMessages(msg.uids)
+		return m.afterMoveSuccess(msg.uids, msg.dest)
 
-		// Same ordering rule as delete: the confirmation is set after following the
-		// move, because opening the neighbour clears the status bar.
-		next, cmd := m.followRows()
-		next.status = fmt.Sprintf("moved %s to %s", countLabel(len(msg.uids), "message"), msg.dest)
+	case folderMoveMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
 
-		return next, cmd
+		if msg.err != nil {
+			m.status = folderMoveStatus(msg)
+
+			return m, nil
+		}
+
+		return m.afterMoveSuccess(msg.uids, msg.dest)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -463,6 +475,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.attachOpen {
 		return m.handleAttachKey(msg)
+	}
+	if m.moveOpen {
+		return m.handleMoveKey(msg)
 	}
 	if m.foldersOpen {
 		return m.handleFoldersKey(msg)
@@ -541,6 +556,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loadingBody = bodyKey{}
 		m.readerScroll = 0
 		m.visualAnchor = noVisualAnchor
+		m.moveOpen = false
+		m.moveFolders = nil
+		m.moveCursor = 0
+
 		m.attachOpen = false
 		m.attachCursor = 0
 		m.foldersOpen = false
@@ -576,6 +595,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionJunk:
 		return m.beginJunk()
+
+	case actionMove:
+		return m.beginMove()
 
 	case actionFilter:
 		return m.openFilter()
@@ -877,6 +899,10 @@ func (m Model) View() string {
 		}
 	case m.accountsOpen:
 		if modal := m.renderAccountsModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
+	case m.moveOpen:
+		if modal := m.renderMoveModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal
 		}
 	case m.foldersOpen:
