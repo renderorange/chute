@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
@@ -28,6 +29,9 @@ type sessionClient interface {
 	Unseen(folder string) (uint32, error)
 	Poll(folder string, since imap.UID) (PollResult, error)
 	UIDs(folder string) ([]imap.UID, error)
+	// Abort closes the socket without logging out, for a quit that cannot wait.
+	Abort()
+	// Close logs out when it can, then closes the socket.
 	Close() error
 }
 
@@ -44,7 +48,14 @@ type Session struct {
 	acct    config.Account
 	connect connectFunc
 	client  sessionClient
-	closed  bool
+	// closed is atomic because Close sets it even when it cannot take mu: a quit must not
+	// wait behind an operation in flight (#65).
+	closed atomic.Bool
+
+	// abort is the connected client's socket-only close, published outside mu so Close
+	// can reach the connection while an operation holds the lock. Same connection as
+	// client; nil when there is none.
+	abort atomic.Pointer[func()]
 
 	// folders is the last unfiltered listing. Hiding a mailbox with
 	// hide_folders must not make its role unresolvable, so delete still works
@@ -478,25 +489,40 @@ func (s *Session) DraftsFolder() (string, bool) {
 	return folder.Name, true
 }
 
-// Close logs out and marks the session unusable.
+// Close ends the account's connection without waiting for an operation in flight. An idle
+// session logs out; a busy one has its socket closed underneath the running command, which
+// is what makes the stalled read return. Waiting for the mutex would be the hang (#65): a
+// quit must never block on the network, and the logout it would have bought is etiquette,
+// not correctness.
 func (s *Session) Close() error {
-	s.mu.Lock()
+	s.closed.Store(true)
+
+	if !s.mu.TryLock() {
+		abort := s.abort.Swap(nil)
+
+		// A quit during a fetch is normal, not a failure: closing the socket is the
+		// intended outcome, and the command it interrupts reports the error.
+		if abort != nil {
+			(*abort)()
+		}
+
+		return nil
+	}
 	defer s.mu.Unlock()
 
-	s.closed = true
-	if s.client == nil {
+	client := s.client
+	s.client = nil
+	s.abort.Store(nil)
+	if client == nil {
 		return nil
 	}
 
-	err := s.client.Close()
-	s.client = nil
-
-	return err
+	return client.Close()
 }
 
 // acquireLocked returns the live client, connecting if there is none.
 func (s *Session) acquireLocked() (sessionClient, error) {
-	if s.closed {
+	if s.closed.Load() {
 		return nil, errSessionClosed
 	}
 	if s.client != nil {
@@ -509,11 +535,16 @@ func (s *Session) acquireLocked() (sessionClient, error) {
 	}
 	s.client = client
 
+	// Abort is what Close uses when a command holds the lock.
+	abort := func() { client.Abort() }
+	s.abort.Store(&abort)
+
 	return client, nil
 }
 
 // resetLocked drops a failed connection so the next operation reconnects.
 func (s *Session) resetLocked() {
+	s.abort.Store(nil)
 	if s.client == nil {
 		return
 	}
@@ -567,7 +598,7 @@ func (m *Manager) For(acct config.Account) *Session {
 
 	session := newSession(acct, m.connect)
 	if m.closed {
-		session.closed = true
+		session.closed.Store(true)
 	}
 	m.sessions[acct.Name] = session
 
