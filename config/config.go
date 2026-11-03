@@ -26,6 +26,7 @@ const privateMode = 0o600
 type Config struct {
 	General  General   `toml:"general"`
 	Layout   Layout    `toml:"layout"`
+	List     List      `toml:"list"`
 	Accounts []Account `toml:"accounts"`
 
 	// Keys overrides the shipped keymap per action: [keys] with reload = ["ctrl+r"].
@@ -207,6 +208,10 @@ func (c *Config) applyDefaults() {
 	}
 	c.General.ReplyPosition = strings.ToLower(strings.TrimSpace(c.General.ReplyPosition))
 
+	if c.List.DateFormat == "" {
+		c.List.DateFormat = ListDateFormat
+	}
+
 	for i := range c.Accounts {
 		is := &c.Accounts[i].IMAP
 		if is.Port == 0 {
@@ -250,6 +255,10 @@ func (c *Config) validate() error {
 	}
 
 	if err := c.Layout.validate(); err != nil {
+		return err
+	}
+
+	if err := c.List.validate(); err != nil {
 		return err
 	}
 

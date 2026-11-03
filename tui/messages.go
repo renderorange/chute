@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
 )
 
@@ -111,10 +113,39 @@ func (m Model) messageLines(rows, width int) []string {
 	return lines
 }
 
-// messageGap is the spaces between the subject field and the date.
-const messageGap = 3
+// Gaps and fixed widths of a message row. The date is the only column with a wider
+// gap before it, which is what makes it read as a separate column rather than a third
+// field; every other gap is one space.
+const (
+	messageGap = 3
 
-// messageLine renders one message row: markers, sender, subject, gap, date.
+	columnGap = 1
+
+	// rowPrefixCells is the selection marker, the unread and flagged markers, and the
+	// space after them.
+	rowPrefixCells = 3
+
+	// minSubjectWidth is the narrowest the subject may become before the indent is
+	// given up instead.
+	minSubjectWidth = 4
+)
+
+// gapBefore is the gap between a column and the one before it.
+func gapBefore(col string) int {
+	if col == config.ListColumnDate {
+		return messageGap
+	}
+
+	return columnGap
+}
+
+// listColumns is the configured column order, or the shipped one when [list] is absent.
+func (m Model) listColumns() []string {
+	return m.cfg.List.ColumnOrder()
+}
+
+// messageLine renders one message row: markers, then the configured columns in order,
+// with the subject absorbing whatever width is left.
 func (m Model) messageLine(index, width int) string {
 	msg := m.rows[index].Message
 
@@ -131,30 +162,63 @@ func (m Model) messageLine(index, width int) string {
 		unread = ">"
 	}
 
-	date := msg.Date().Local().Format("Jan 02")
-	fromWidth := clamp(width/4, 10, 20)
+	columns := m.listColumns()
+
+	// The date is truncated and measured in display cells, not bytes: the layout comes
+	// from config, so a wide rune is user input and could otherwise widen the row.
+	date := TruncateDisplay(m.cfg.List.FormatDate(msg.Date().Local()), config.ListMaxDateCells)
+
+	// Widths of the columns that do not absorb space.
+	fixed := make(map[string]int, len(columns))
+	for _, col := range columns {
+		switch col {
+		case config.ListColumnFrom:
+			fixed[col] = clamp(width/4, 10, 20)
+		case config.ListColumnDate:
+			fixed[col] = lipgloss.Width(date)
+		}
+	}
 
 	// Indentation comes out of the subject budget, never out of the row: two cells
-	// per depth, capped, and given up entirely if the row is too narrow to hold a
-	// subject afterwards.
+	// per depth, capped, and given up entirely before the subject is squeezed.
 	indent := 2 * min(m.rows[index].Depth, MaxThreadDepth)
-	if limit := width - fromWidth - len(date) - messageGap - 4 - 4; indent > limit {
-		indent = max(0, limit)
+
+	base := rowPrefixCells
+	for i, col := range columns {
+		if i > 0 {
+			base += gapBefore(col)
+		}
+		if col != config.ListColumnSubject {
+			base += fixed[col]
+		}
 	}
 
-	subjectWidth := width - fromWidth - len(date) - messageGap - 4 - indent
-	if subjectWidth < 4 {
-		subjectWidth = 4
+	indent = min(indent, max(0, width-base-minSubjectWidth))
+	subjectWidth := max(minSubjectWidth, width-base-indent)
+
+	var row strings.Builder
+
+	row.WriteString(unread)
+	row.WriteString(flagged)
+	row.WriteString(" ")
+	row.WriteString(strings.Repeat(" ", indent))
+
+	for i, col := range columns {
+		if i > 0 {
+			row.WriteString(strings.Repeat(" ", gapBefore(col)))
+		}
+
+		switch col {
+		case config.ListColumnFrom:
+			row.WriteString(padColumn(singleLine(msg.From()), fixed[col]))
+		case config.ListColumnSubject:
+			row.WriteString(padColumn(singleLine(msg.Subject()), subjectWidth))
+		case config.ListColumnDate:
+			row.WriteString(date)
+		}
 	}
 
-	line := fmt.Sprintf("%s%s %s%s %s%s%s",
-		unread, flagged,
-		strings.Repeat(" ", indent),
-		padColumn(singleLine(msg.From()), fromWidth),
-		padColumn(singleLine(msg.Subject()), subjectWidth),
-		strings.Repeat(" ", messageGap),
-		date,
-	)
+	line := row.String()
 
 	if index == m.messageCursor {
 		return SelectedStyle.Render(line)
