@@ -25,6 +25,12 @@ type Compose struct {
 	To []string
 	Cc []string
 
+	// Bcc is delivered but not disclosed. BuildMessage writes the header so the SMTP
+	// envelope can address the blind recipients, and the copy filed in Sent is built
+	// through StripBcc, which removes it again. A draft keeps it, because the draft is
+	// where a reopened message recovers its recipients (#62).
+	Bcc []string
+
 	InReplyTo  string
 	References []string
 
@@ -53,6 +59,11 @@ func BuildMessage(c Compose) ([]byte, error) {
 			return nil, err
 		}
 	}
+	for _, addr := range c.Bcc {
+		if err := checkHeaderField("Bcc", addr); err != nil {
+			return nil, err
+		}
+	}
 
 	if strings.TrimSpace(c.From) == "" {
 		return nil, errors.New("mail: composing a message with no From address")
@@ -68,6 +79,10 @@ func BuildMessage(c Compose) ([]byte, error) {
 	header.Set("To", strings.Join(c.To, ", "))
 	if len(c.Cc) > 0 {
 		header.Set("Cc", strings.Join(c.Cc, ", "))
+	}
+	// An empty Bcc is omitted rather than written as "Bcc: ".
+	if bcc := nonBlank(c.Bcc); len(bcc) > 0 {
+		header.Set("Bcc", strings.Join(bcc, ", "))
 	}
 	header.Set("Subject", c.Subject)
 	header.Set("Date", time.Now().Format(time.RFC1123Z))
@@ -154,10 +169,25 @@ func parseCompose(raw []byte) (*Compose, error) {
 		MessageID:      bareID(entity.Header.Get("Message-ID")),
 		To:             splitAddresses(entity.Header.Get("To")),
 		Cc:             splitAddresses(entity.Header.Get("Cc")),
+		Bcc:            splitAddresses(entity.Header.Get("Bcc")),
 		InReplyTo:      bareID(firstToken(entity.Header.Get("In-Reply-To"))),
 		References:     bareIDs(strings.Fields(entity.Header.Get("References"))),
 		HadAttachments: len(body.Attachments) > 0,
 	}, nil
+}
+
+// nonBlank drops empty entries from a header list, so a stray comma in the composer
+// cannot produce an empty header value or an empty recipient.
+func nonBlank(values []string) []string {
+	out := make([]string, 0, len(values))
+
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+
+	return out
 }
 
 // splitAddresses turns a header value into one string per address, keeping display

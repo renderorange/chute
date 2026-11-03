@@ -304,6 +304,10 @@ func (m Model) sendComposeCmd() tea.Cmd {
 	drafts, haveDrafts := m.draftsFolder(acct)
 	draftUID, draftKnown := m.composeDraftUID, m.composeDraftKnown
 
+	// The transmitted bytes carry Bcc so the envelope can address the blind recipients;
+	// the filed copy must not disclose them (#62).
+	filed := mail.StripBcc(msg)
+
 	return func() tea.Msg {
 		result := sendResultMsg{account: acct.Name}
 
@@ -320,7 +324,7 @@ func (m Model) sendComposeCmd() tea.Cmd {
 		result.sent = true
 
 		if appendSent != nil {
-			if err := appendSent(acct, msg); err != nil {
+			if err := appendSent(acct, filed); err != nil {
 				result.err = err
 
 				return result

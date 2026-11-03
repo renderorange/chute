@@ -27,17 +27,24 @@ type composeFakes struct {
 	savedKnown  bool
 	saveErr     error
 
+	// sentMsg is what SMTP would have transmitted; appendedMsg is what was filed in
+	// Sent. They differ only by the Bcc header (#62).
+	sentMsg     []byte
+	appendedMsg []byte
+
 	removed []imap.UID
 }
 
-func (f *composeFakes) send(_ config.Account, _ []byte) error {
+func (f *composeFakes) send(_ config.Account, msg []byte) error {
 	f.order = append(f.order, "send")
+	f.sentMsg = msg
 
 	return f.sendErr
 }
 
-func (f *composeFakes) appendSent(_ config.Account, _ []byte) error {
+func (f *composeFakes) appendSent(_ config.Account, msg []byte) error {
 	f.order = append(f.order, "append")
+	f.appendedMsg = msg
 
 	return f.appendErr
 }
