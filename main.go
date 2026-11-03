@@ -122,13 +122,13 @@ func checkIMAP(acct *config.Account, stdout, stderr io.Writer, mailOptions ...ma
 
 	password, err := acct.IMAPPassword()
 	if err != nil {
-		fmt.Fprintf(stderr, "%s: %v\n", acct.Name, err)
+		_, _ = fmt.Fprintf(stderr, "%s: %v\n", acct.Name, err)
 		return false
 	}
 
 	client, err := mail.Connect(*acct, password, mailOptions...)
 	if err != nil {
-		fmt.Fprintf(stderr, "%s: %v\n", acct.Name, err)
+		_, _ = fmt.Fprintf(stderr, "%s: %v\n", acct.Name, err)
 		return false
 	}
 
@@ -136,14 +136,14 @@ func checkIMAP(acct *config.Account, stdout, stderr io.Writer, mailOptions ...ma
 	closeErr := client.Close()
 
 	if listErr != nil {
-		fmt.Fprintf(stderr, "%s: %v\n", acct.Name, listErr)
+		_, _ = fmt.Fprintf(stderr, "%s: %v\n", acct.Name, listErr)
 		return false
 	}
 	folders = mail.FilterFolders(folders, acct.IMAP.HideFolders)
 
 	ok := true
 	if closeErr != nil {
-		fmt.Fprintf(stderr, "%s: logout: %v\n", acct.Name, closeErr)
+		_, _ = fmt.Fprintf(stderr, "%s: logout: %v\n", acct.Name, closeErr)
 		ok = false
 	}
 
@@ -152,7 +152,7 @@ func checkIMAP(acct *config.Account, stdout, stderr io.Writer, mailOptions ...ma
 		tlsMode = "starttls"
 	}
 
-	fmt.Fprintf(stdout, "%s: %s as %s, credential=%s, tls=%s, folders=%d\n",
+	_, _ = fmt.Fprintf(stdout, "%s: %s as %s, credential=%s, tls=%s, folders=%d\n",
 		acct.Name, acct.IMAPAddress(), acct.IMAP.Username, source, tlsMode, len(folders))
 
 	for _, folder := range folders {
@@ -160,7 +160,7 @@ func checkIMAP(acct *config.Account, stdout, stderr io.Writer, mailOptions ...ma
 		if role == mail.RoleNone {
 			continue
 		}
-		fmt.Fprintf(stdout, "  %-8s %s\n", role, folder.Name)
+		_, _ = fmt.Fprintf(stdout, "  %-8s %s\n", role, folder.Name)
 	}
 
 	return ok
@@ -177,12 +177,12 @@ func checkSMTP(acct *config.Account, stdout, stderr io.Writer) bool {
 
 	password, err := acct.SMTPPassword()
 	if err != nil {
-		fmt.Fprintf(stderr, "%s: smtp: %v\n", acct.Name, err)
+		_, _ = fmt.Fprintf(stderr, "%s: smtp: %v\n", acct.Name, err)
 		return false
 	}
 
 	if err := mail.CheckSMTP(*acct, password); err != nil {
-		fmt.Fprintf(stderr, "%s: smtp %s: %v\n", acct.Name, acct.SMTPAddress(), err)
+		_, _ = fmt.Fprintf(stderr, "%s: smtp %s: %v\n", acct.Name, acct.SMTPAddress(), err)
 		return false
 	}
 
@@ -197,7 +197,7 @@ func checkSMTP(acct *config.Account, stdout, stderr io.Writer) bool {
 		hostSource = "inherited"
 	}
 
-	fmt.Fprintf(stdout, "%s: smtp %s as %s, credential=%s, tls=%s, host=%s\n",
+	_, _ = fmt.Fprintf(stdout, "%s: smtp %s as %s, credential=%s, tls=%s, host=%s\n",
 		acct.Name, acct.SMTPAddress(), acct.SMTP.Username, source, tlsMode, hostSource)
 
 	return true
