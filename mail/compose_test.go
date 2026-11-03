@@ -180,9 +180,9 @@ func TestComposeRoundTripKeepsThreadingHeaders(t *testing.T) {
 		To:         []string{"one@example.com"},
 		Subject:    "Re: hello",
 		Text:       "body text",
-		MessageID:  "<reply@example.org>",
-		InReplyTo:  "<parent@example.org>",
-		References: []string{"<root@example.org>", "<parent@example.org>"},
+		MessageID:  "reply@example.org",
+		InReplyTo:  "parent@example.org",
+		References: []string{"root@example.org", "parent@example.org"},
 	}
 
 	raw, err := BuildMessage(want)

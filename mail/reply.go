@@ -60,9 +60,9 @@ func ReplyCompose(orig Compose, opts ReplyOptions) Compose {
 		reply.Cc = withoutAddress(orig.Cc, opts.Self, orig.From)
 	}
 
-	if orig.MessageID != "" {
-		reply.InReplyTo = orig.MessageID
-		reply.References = append(append([]string(nil), orig.References...), orig.MessageID)
+	if parent := bareID(orig.MessageID); parent != "" {
+		reply.InReplyTo = parent
+		reply.References = append(bareIDs(orig.References), parent)
 	}
 
 	return reply

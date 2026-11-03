@@ -24,7 +24,7 @@ func TestParseBodyKeepsTheReferencesChain(t *testing.T) {
 		t.Fatalf("parseBody: %v", err)
 	}
 
-	want := []string{"<root@example.com>", "<grandparent@example.com>"}
+	want := []string{"root@example.com", "grandparent@example.com"}
 	if got := strings.Join(body.References, " "); got != strings.Join(want, " ") {
 		t.Errorf("References = %q, want %q", got, strings.Join(want, " "))
 	}
@@ -84,7 +84,7 @@ func TestFetchBodyCarriesReferencesInOneFetch(t *testing.T) {
 		t.Fatalf("FetchBody: %v", err)
 	}
 
-	want := []string{"<root@example.com>", "<grandparent@example.com>"}
+	want := []string{"root@example.com", "grandparent@example.com"}
 	if got := strings.Join(body.References, " "); got != strings.Join(want, " ") {
 		t.Errorf("References through FetchBody = %q, want %q", got, strings.Join(want, " "))
 	}

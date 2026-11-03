@@ -51,8 +51,8 @@ func replyOrigin() Compose {
 		Cc:         []string{"cc@example.org", "Me <ME@example.org>"},
 		Subject:    "the subject",
 		Text:       "line one\n\nline three",
-		MessageID:  "<parent@example.org>",
-		References: []string{"<root@example.org>"},
+		MessageID:  "parent@example.org",
+		References: []string{"root@example.org"},
 	}
 }
 
@@ -79,10 +79,10 @@ func TestReplyComposeTopPosting(t *testing.T) {
 	if got.Subject != "Re: the subject" {
 		t.Errorf("Subject = %q, want %q", got.Subject, "Re: the subject")
 	}
-	if got.InReplyTo != "<parent@example.org>" {
+	if got.InReplyTo != "parent@example.org" {
 		t.Errorf("InReplyTo = %q", got.InReplyTo)
 	}
-	if len(got.References) != 2 || got.References[1] != "<parent@example.org>" {
+	if len(got.References) != 2 || got.References[1] != "parent@example.org" {
 		t.Errorf("References = %v, want the original chain plus the parent", got.References)
 	}
 	if len(got.To) != 1 || got.To[0] != "Sender <sender@example.org>" {
