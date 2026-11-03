@@ -90,6 +90,70 @@ func TestBuildRowsChain(t *testing.T) {
 	}
 }
 
+// TestBuildRowsThreadsOnReferences is #70: a sender that sets only References still nests,
+// under the last entry that names a message in this folder.
+func TestBuildRowsThreadsOnReferences(t *testing.T) {
+	// Bare ids, the shape the envelope and the parsed References header both have in
+	// production (#71); a mixed form is the bug that made threading look wired.
+	root := threadMessage(1, "root", "a", 1)
+	middle := threadMessage(2, "middle", "b", 2, "a")
+
+	reply := threadMessage(3, "reply", "c", 3)
+	reply.References = []string{"a", "b"}
+
+	rows := BuildRows([]mail.Message{reply, root, middle})
+
+	assertUIDs(t, rows, []imap.UID{1, 2, 3})
+	assertDepths(t, rows, []int{0, 1, 2})
+}
+
+// TestBuildRowsPrefersInReplyTo proves the fallback cannot override a real parent: when both
+// headers point at different messages, the immediate parent wins.
+func TestBuildRowsPrefersInReplyTo(t *testing.T) {
+	root := threadMessage(1, "root", "a", 1)
+	middle := threadMessage(2, "middle", "b", 2, "a")
+
+	reply := threadMessage(3, "reply", "c", 3, "b")
+	reply.References = []string{"a"}
+
+	rows := BuildRows([]mail.Message{root, middle, reply})
+
+	assertUIDs(t, rows, []imap.UID{1, 2, 3})
+	assertDepths(t, rows, []int{0, 1, 2})
+}
+
+// TestBuildRowsReferencesOutsideTheFolder leaves the message at the root: a chain naming
+// only unknown ids is the orphan case, not a thread.
+func TestBuildRowsReferencesOutsideTheFolder(t *testing.T) {
+	orphan := threadMessage(1, "orphan", "o", 2)
+	orphan.References = []string{"gone-1", "gone-2"}
+
+	rows := BuildRows([]mail.Message{orphan})
+
+	assertUIDs(t, rows, []imap.UID{1})
+	assertDepths(t, rows, []int{0})
+}
+
+// TestBuildRowsReferencesCycle terminates on References chains that point at each other,
+// because the chain is attacker-controlled and longer than a single parent.
+func TestBuildRowsReferencesCycle(t *testing.T) {
+	a := threadMessage(1, "a", "a", 1)
+	a.References = []string{"b"}
+	b := threadMessage(2, "b", "b", 2)
+	b.References = []string{"a"}
+
+	rows := BuildRows([]mail.Message{a, b})
+
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2: %v", len(rows), rowUIDs(rows))
+	}
+	for i, depth := range rowDepths(rows) {
+		if depth < 0 || depth > MaxThreadDepth {
+			t.Errorf("row %d depth = %d, want 0..%d", i, depth, MaxThreadDepth)
+		}
+	}
+}
+
 // TestBuildRowsMissingParent proves a reply whose parent is not in the folder is
 // visible as a root rather than being hidden. This is the M4 gate.
 func TestBuildRowsMissingParent(t *testing.T) {

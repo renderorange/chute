@@ -136,13 +136,7 @@ func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
 		return nil, fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
 	}
 
-	cmd := c.conn.Fetch(allMessages(), &imap.FetchOptions{
-		Envelope:     true,
-		Flags:        true,
-		InternalDate: true,
-		RFC822Size:   true,
-		UID:          true,
-	})
+	cmd := c.conn.Fetch(allMessages(), listFetchOptions())
 	defer cmd.Close()
 
 	buffers, err := cmd.Collect()
@@ -151,6 +145,31 @@ func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {
 	}
 
 	return messagesFromBuffers(buffers), nil
+}
+
+// listFetchOptions is the one FETCH the folder load and the poll both issue: envelope,
+// flags, date, size and the References header. In-Reply-To alone is not enough, because some
+// senders and list gateways set only References (#70). One command, not two.
+func listFetchOptions() *imap.FetchOptions {
+	return &imap.FetchOptions{
+		Envelope:     true,
+		Flags:        true,
+		InternalDate: true,
+		RFC822Size:   true,
+		UID:          true,
+		BodySection:  []*imap.FetchItemBodySection{referencesSection()},
+	}
+}
+
+// referencesSection asks for one header field. It is a section of the FETCH that already
+// happens, so the round trip is unchanged and only the payload grows. The Specifier is what
+// makes the encoder write BODY.PEEK[HEADER.FIELDS (...)] rather than the whole body.
+func referencesSection() *imap.FetchItemBodySection {
+	return &imap.FetchItemBodySection{
+		Specifier:    imap.PartSpecifierHeader,
+		HeaderFields: []string{"References"},
+		Peek:         true,
+	}
 }
 
 // PollResult is what one incremental check found in a folder.
@@ -204,13 +223,7 @@ func (c *Client) fetchAfter(folder string, since imap.UID) ([]Message, error) {
 	var set imap.UIDSet
 	set.AddRange(since+1, 0)
 
-	cmd := c.conn.Fetch(set, &imap.FetchOptions{
-		Envelope:     true,
-		Flags:        true,
-		InternalDate: true,
-		RFC822Size:   true,
-		UID:          true,
-	})
+	cmd := c.conn.Fetch(set, listFetchOptions())
 	buffers, err := cmd.Collect()
 	cmd.Close()
 
@@ -478,10 +491,34 @@ func messagesFromBuffers(buffers []*imapclient.FetchMessageBuffer) []Message {
 			msg.InReplyTo = buf.Envelope.InReplyTo
 		}
 
+		if raw := buf.FindBodySection(referencesSection()); len(raw) > 0 {
+			msg.References = parseReferencesHeader(raw)
+		}
+
 		messages = append(messages, msg)
 	}
 
 	return messages
+}
+
+// parseReferencesHeader turns the fetched header block into the bare ids the rest of the
+// package uses. The section arrives as "References: <a@x>\r\n <b@x>\r\n": the name comes
+// off first, folding is just whitespace to Fields, and the brackets are stripped because
+// envelope ids are bare and threading compares raw strings (#70, #71).
+func parseReferencesHeader(raw []byte) []string {
+	text := string(raw)
+	if _, value, ok := strings.Cut(text, ":"); ok {
+		text = value
+	}
+
+	// Some senders separate the ids with commas, which RFC 5322 does not allow there but
+	// which appears in the wild; the comma is not part of the id.
+	fields := strings.Fields(text)
+	for i, field := range fields {
+		fields[i] = strings.TrimSuffix(field, ",")
+	}
+
+	return bareIDs(fields)
 }
 
 // foldersFromList converts protocol data into sorted folders.

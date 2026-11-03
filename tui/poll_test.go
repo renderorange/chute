@@ -246,6 +246,31 @@ func TestPollDroppingCountAsksForSurvivingUIDs(t *testing.T) {
 	}
 }
 
+// TestPollThreadsAReferencesOnlyReply is #70's poll half: a reply that arrives while the
+// folder is open, carrying only References, lands under its parent instead of beside it.
+func TestPollThreadsAReferencesOnlyReply(t *testing.T) {
+	m := sized(140, 40)
+	m.account = 0
+	m.openFolder = "INBOX"
+	m.messages = []mail.Message{threadMessage(1, "root", "a", 1)}
+	m.rows = BuildRows(m.messages)
+	m.lastSeen = map[folderKey]imap.UID{{account: "fastmail", folder: "INBOX"}: 1}
+
+	reply := threadMessage(3, "reply", "c", 2)
+	reply.References = []string{"a"}
+
+	next, _ := m.Update(pollResultMsg(mail.PollResult{Total: 2, Messages: []mail.Message{reply}}))
+	m = next.(Model)
+
+	if len(m.rows) != 2 {
+		t.Fatalf("rows = %d, want the reply merged: %v", len(m.rows), rowUIDs(m.rows))
+	}
+	if m.rows[1].Message.UID != 3 || m.rows[1].Depth != 1 {
+		t.Errorf("reply row = UID %d depth %d, want UID 3 at depth 1",
+			m.rows[1].Message.UID, m.rows[1].Depth)
+	}
+}
+
 func TestPollFailureLeavesTheListAndReports(t *testing.T) {
 	m := openFolderModel(t)
 	before := len(m.messages)

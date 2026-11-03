@@ -92,9 +92,10 @@ func indexByMessageID(messages []mail.Message) map[string]int {
 	return byID
 }
 
-// parents resolves each message's parent index, or noParent. References are
-// scanned from the last entry backwards, because the last one naming a message in
-// this folder is the closest ancestor.
+// parents resolves each message's parent index, or noParent. In-Reply-To is authoritative;
+// References is the fallback for senders that set only that header. Either chain is scanned
+// from the last entry backwards, because the last one naming a message in this folder is the
+// closest ancestor.
 func parents(messages []mail.Message, byID map[string]int, n int) []int {
 	parent := make([]int, n)
 	for i := range parent {
@@ -102,22 +103,32 @@ func parents(messages []mail.Message, byID map[string]int, n int) []int {
 	}
 
 	for i := range messages {
-		refs := messages[i].InReplyTo
-		for k := len(refs) - 1; k >= 0; k-- {
-			id := strings.TrimSpace(refs[k])
-			if id == "" {
-				continue
-			}
-			j, ok := byID[id]
-			if !ok || j == i || isAncestor(parent, j, i) {
-				continue
-			}
-			parent[i] = j
-			break
+		parent[i] = closestParent(messages[i].InReplyTo, byID, parent, i)
+		if parent[i] == noParent {
+			parent[i] = closestParent(messages[i].References, byID, parent, i)
 		}
 	}
 
 	return parent
+}
+
+// closestParent returns the index of the last id in chain that names another message in this
+// folder without closing a cycle, or noParent.
+func closestParent(chain []string, byID map[string]int, parent []int, index int) int {
+	for k := len(chain) - 1; k >= 0; k-- {
+		id := strings.TrimSpace(chain[k])
+		if id == "" {
+			continue
+		}
+		j, ok := byID[id]
+		if !ok || j == index || isAncestor(parent, j, index) {
+			continue
+		}
+
+		return j
+	}
+
+	return noParent
 }
 
 // isAncestor reports whether ancestor sits above candidate in the parent chain
