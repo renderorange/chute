@@ -136,8 +136,13 @@ func runCheck(cfg *config.Config, mailOptions ...mail.Option) bool {
 			ok = false
 		}
 
-		fmt.Printf("%s: %s as %s, credential=%s, folders=%d\n",
-			acct.Name, acct.IMAPAddress(), acct.IMAP.Username, source, len(folders))
+		tlsMode := "implicit"
+		if acct.IMAP.UseTLS != nil && !*acct.IMAP.UseTLS {
+			tlsMode = "starttls"
+		}
+
+		fmt.Printf("%s: %s as %s, credential=%s, tls=%s, folders=%d\n",
+			acct.Name, acct.IMAPAddress(), acct.IMAP.Username, source, tlsMode, len(folders))
 
 		for _, folder := range folders {
 			role := folder.Role()

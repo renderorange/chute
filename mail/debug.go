@@ -40,11 +40,11 @@ func withDial(dial dialFunc) Option {
 
 // WithPlaintextDial connects without TLS, for a loopback server in a test.
 //
-// Connect dials TLS and nothing else, because a mail credential over a cleartext
-// socket is a defect in production. The in-process server the suite runs against is
-// plaintext, so a test that drives the whole program — config, manager, client,
-// model — needs this seam before it can exist. It is not a configuration option: no
-// config file can reach it, so no user can turn TLS off by accident.
+// Connect dials implicit TLS, or STARTTLS when the account sets use_tls = false; it
+// never sends a credential over an unencrypted connection. The in-process server the
+// suite runs against is plaintext, so a test that drives the whole program — config,
+// manager, client, model — needs this seam. It is not a configuration option: no config
+// file can reach it, so no user can turn encryption off by accident.
 func WithPlaintextDial() Option {
 	return withDial(func(address string, options *imapclient.Options) (*imapclient.Client, error) {
 		return imapclient.DialInsecure(address, options)
