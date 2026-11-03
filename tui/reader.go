@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/renderorange/chute/mail"
 )
 
@@ -184,12 +185,15 @@ func formatSize(n int) string {
 	}
 }
 
-// wrapText word-wraps plain text to width, preserving explicit line breaks.
+// wrapText word-wraps plain text to width display cells, preserving explicit line
+// breaks. Width-changing characters are removed first, so the cells this counts are the
+// cells the terminal draws.
 func wrapText(text string, width int) []string {
 	if width < 1 {
 		return nil
 	}
 
+	text = sanitizeText(text)
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 
@@ -205,33 +209,61 @@ func wrapText(text string, width int) []string {
 	return lines
 }
 
-// wrapLine wraps one logical line, hard-breaking a word longer than width.
+// wrapLine wraps one logical line at width display cells, hard-breaking a word longer
+// than width. Counting cells rather than runes is what keeps a wide-rune line inside the
+// pane: a 34-rune CJK line is 68 cells, which lipgloss then re-wraps and the panel clips.
 func wrapLine(line string, width int) []string {
 	line = strings.ReplaceAll(line, "\t", "    ")
 	if line == "" {
 		return []string{""}
 	}
 
-	var lines []string
-	remaining := []rune(line)
-	for len(remaining) > width {
-		cut := width
-		for i := width; i > 0; i-- {
-			if remaining[i] == ' ' {
-				cut = i
-				break
+	var (
+		lines []string
+		row   []rune
+		used  int
+		space = -1 // index in row of the last space, or -1
+	)
+
+	// breakRow emits the row at its last space, keeping the tail for the next line, or
+	// hard-breaks the whole row when there is no space to break at.
+	breakRow := func() {
+		if space >= 0 {
+			lines = append(lines, strings.TrimRight(string(row[:space]), " "))
+			row = append([]rune(nil), row[space+1:]...)
+			for len(row) > 0 && row[0] == ' ' {
+				row = row[1:]
 			}
-		}
-		if cut <= 0 {
-			cut = width
+		} else {
+			lines = append(lines, string(row))
+			row = nil
 		}
 
-		lines = append(lines, strings.TrimRight(string(remaining[:cut]), " "))
-		remaining = remaining[cut:]
-		if len(remaining) > 0 && remaining[0] == ' ' {
-			remaining = remaining[1:]
+		used, space = 0, -1
+		for i, r := range row {
+			used += runewidth.RuneWidth(r)
+			if r == ' ' {
+				space = i
+			}
 		}
 	}
 
-	return append(lines, string(remaining))
+	for _, r := range line {
+		w := runewidth.RuneWidth(r)
+		if used+w > width && len(row) > 0 {
+			breakRow()
+		}
+
+		row = append(row, r)
+		if r == ' ' {
+			space = len(row) - 1
+		}
+		used += w
+	}
+
+	if len(row) > 0 {
+		lines = append(lines, strings.TrimRight(string(row), " "))
+	}
+
+	return lines
 }
