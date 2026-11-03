@@ -130,6 +130,8 @@ func (m Model) footerHints() []footerHint {
 	switch {
 	case m.helpOpen:
 		return []footerHint{hint(actionBack, "close"), hintPair(actionUp, actionDown, "scroll")}
+	case m.settingsOpen:
+		return []footerHint{hintPair(actionUp, actionDown, "scroll"), hint(actionBack, "close")}
 	case m.searchOpen:
 		return []footerHint{hint(actionOpen, "search"), hint(actionBack, "cancel")}
 	case m.filterOpen:

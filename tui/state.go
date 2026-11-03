@@ -14,6 +14,15 @@ import (
 // A remembered account that is no longer in the config is ignored, which leaves the
 // configured default in place: the config is the authority, and a removed account is
 // not an error. A nil writer keeps the model inert, which is what tests rely on.
+// WithPaths records where the config came from and where the debug log goes, so the settings
+// report can name them. Neither is needed to run, so both are optional (#67).
+func (m Model) WithPaths(configPath, debugPath string) Model {
+	m.configPath = configPath
+	m.debugPath = debugPath
+
+	return m
+}
+
 func (m Model) WithSelection(sel config.State, save func(config.State) error) Model {
 	m.selection = sel
 	m.saveState = save
