@@ -420,6 +420,45 @@ func TestForwardKeySeparatesWithoutQuoting(t *testing.T) {
 	}
 }
 
+// TestForwardWarnsAboutDroppedAttachments is #61: the composer cannot re-attach files, so
+// a forward must say that the attachments are being left behind instead of silently
+// producing a message without them.
+func TestForwardWarnsAboutDroppedAttachments(t *testing.T) {
+	m, _ := withComposeModel(t)
+
+	m.bodies[m.selectedBodyKey()] = &mail.Body{
+		Text: "original text",
+		Attachments: []mail.Attachment{
+			{Filename: "invoice.pdf", ContentType: "application/pdf"},
+			{Filename: "photo.jpg", ContentType: "image/jpeg"},
+		},
+	}
+
+	m = press(t, m, keyMsg("F"))
+
+	if m.compose == nil {
+		t.Fatal("F opened no composer")
+	}
+	if want := "forwarding without 2 attachments"; m.status != want {
+		t.Errorf("status = %q, want %q", m.status, want)
+	}
+}
+
+// TestForwardWithoutAttachmentsDoesNotWarn keeps the notice specific to the case it
+// describes; an attachment-free forward must not mention attachments.
+func TestForwardWithoutAttachmentsDoesNotWarn(t *testing.T) {
+	m, _ := withComposeModel(t)
+
+	m = press(t, m, keyMsg("F"))
+
+	if m.compose == nil {
+		t.Fatal("F opened no composer")
+	}
+	if strings.Contains(m.status, "attachment") {
+		t.Errorf("status = %q, want no attachment notice", m.status)
+	}
+}
+
 // TestSecondSaveRemovesTheEarlierDraft proves saving twice does not leave a trail: the
 // earlier copy is removed once the new one lands.
 func TestSecondSaveRemovesTheEarlierDraft(t *testing.T) {

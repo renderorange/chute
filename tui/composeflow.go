@@ -169,6 +169,13 @@ func (m Model) beginForward() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// The composer has no way to re-attach files, so say what is being left behind.
+	// Silence here produces a forward that looks complete and is not (#61).
+	notice := ""
+	if n := len(body.Attachments); n > 0 {
+		notice = "forwarding without " + countLabel(n, "attachment")
+	}
+
 	fwd := mail.ForwardCompose(mail.Compose{
 		From:    msg.FromAddress(),
 		To:      msg.ToAddresses(),
@@ -181,7 +188,7 @@ func (m Model) beginForward() (tea.Model, tea.Cmd) {
 	m.compose = newComposer(fwd, false)
 	m.composeDraftUID = 0
 	m.composeDraftKnown = false
-	m.status = ""
+	m.status = notice
 
 	return m, nil
 }
