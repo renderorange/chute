@@ -26,12 +26,14 @@ mkdir -p ~/.config/chute
 cp config.example.toml ~/.config/chute/config.toml
 chmod 600 ~/.config/chute/config.toml
 $EDITOR ~/.config/chute/config.toml     # host, username, credential
-chute -check                            # connect, list folders, print the TLS mode
+chute -check                            # IMAP and SMTP preflight, print the TLS modes
 chute
 ```
 
 `chute -check` is the fast way to find a wrong host, port or credential: it connects to
-every account, prints `tls=implicit` or `tls=starttls`, and exits non-zero on failure.
+every account over IMAP (listing folders) and over SMTP (EHLO, AUTH, QUIT, sending no
+mail), prints `tls=implicit` or `tls=starttls` for each half, and exits non-zero when
+either fails.
 
 ## Configuration
 
@@ -104,7 +106,7 @@ One table per account. More than one is supported; `a` opens the account dialog 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `host` | the IMAP host | Server hostname. |
+| `host` | the IMAP host | Server hostname. The fallback is reported as `host=inherited` by `-check`. |
 | `port` | `465` | Server port. |
 | `username` | the IMAP username | Login name. |
 | `password`, `password_command` | the IMAP values | Credential source. |
@@ -138,7 +140,7 @@ name that no longer exists is ignored.
 | Flag | Meaning |
 |---|---|
 | `-config` | Path to the config file. Defaults to `$XDG_CONFIG_HOME/chute/config.toml`. |
-| `-check` | Connect to every account, list folders, print the TLS mode, exit. |
+| `-check` | Connect to every account over IMAP (list folders) and SMTP (authenticate, send nothing), print both TLS modes, exit non-zero on any failure. |
 | `-debug` | Write the IMAP protocol log to this file. The credential is masked in it. |
 | `-version` | Print the version and exit. |
 

@@ -171,6 +171,16 @@ type SMTP struct {
 	Password        string `toml:"password"`
 	PasswordCommand string `toml:"password_command"`
 	UseTLS          *bool  `toml:"use_tls"`
+
+	// hostInherited records that applyDefaults filled Host from [accounts.imap], so -check
+	// can say the address was not configured rather than implying it was.
+	hostInherited bool
+}
+
+// HostInherited reports whether the SMTP host came from [accounts.imap] because
+// [accounts.smtp] did not set one.
+func (s SMTP) HostInherited() bool {
+	return s.hostInherited
 }
 
 // Load reads the config file, applies defaults, and validates it.
@@ -241,6 +251,7 @@ func (c *Config) applyDefaults() {
 		}
 		if sm.Host == "" {
 			sm.Host = is.Host
+			sm.hostInherited = true
 		}
 		if sm.Username == "" {
 			sm.Username = is.Username

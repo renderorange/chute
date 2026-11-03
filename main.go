@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -20,7 +21,7 @@ func main() {
 	configPath := flag.String("config", defaultConfigPath(), "path to the config file")
 	debugPath := flag.String("debug", "", "write the IMAP protocol log to this file, with the credential masked")
 	showVersion := flag.Bool("version", false, "print the version and exit")
-	check := flag.Bool("check", false, "connect to every account, list folders, then exit")
+	check := flag.Bool("check", false, "connect to every account, list folders, check SMTP, then exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -41,7 +42,7 @@ func main() {
 	}
 
 	if *check {
-		ok := runCheck(cfg, mailOptions...)
+		ok := runCheck(cfg, os.Stdout, os.Stderr, mailOptions...)
 		closeLog()
 		if !ok {
 			os.Exit(1)
@@ -96,64 +97,110 @@ func debugOptions(path string) ([]mail.Option, func(), error) {
 	return []mail.Option{mail.WithDebugWriter(file)}, closeLog, nil
 }
 
-// runCheck verifies every account can connect and list folders. It prints the
-// credential source but never the credential itself. It reports success.
-func runCheck(cfg *config.Config, mailOptions ...mail.Option) bool {
+// runCheck verifies every account twice: IMAP (connect and list folders) and SMTP (connect,
+// negotiate TLS, authenticate, then quit without sending). It prints the credential source
+// but never the credential itself, and reports false when either half fails for any
+// account.
+func runCheck(cfg *config.Config, stdout, stderr io.Writer, mailOptions ...mail.Option) bool {
 	ok := true
 
 	for i := range cfg.Accounts {
 		acct := &cfg.Accounts[i]
-		source := "plaintext"
-		if acct.IMAP.Password == "" {
-			source = "command"
-		}
-
-		password, err := acct.IMAPPassword()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", acct.Name, err)
-			ok = false
-			continue
-		}
-
-		client, err := mail.Connect(*acct, password, mailOptions...)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", acct.Name, err)
-			ok = false
-			continue
-		}
-
-		folders, listErr := client.Folders()
-		closeErr := client.Close()
-
-		if listErr != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", acct.Name, listErr)
-			ok = false
-			continue
-		}
-		folders = mail.FilterFolders(folders, acct.IMAP.HideFolders)
-		if closeErr != nil {
-			fmt.Fprintf(os.Stderr, "%s: logout: %v\n", acct.Name, closeErr)
-			ok = false
-		}
-
-		tlsMode := "implicit"
-		if acct.IMAP.UseTLS != nil && !*acct.IMAP.UseTLS {
-			tlsMode = "starttls"
-		}
-
-		fmt.Printf("%s: %s as %s, credential=%s, tls=%s, folders=%d\n",
-			acct.Name, acct.IMAPAddress(), acct.IMAP.Username, source, tlsMode, len(folders))
-
-		for _, folder := range folders {
-			role := folder.Role()
-			if role == mail.RoleNone {
-				continue
-			}
-			fmt.Printf("  %-8s %s\n", role, folder.Name)
-		}
+		ok = checkIMAP(acct, stdout, stderr, mailOptions...) && ok
+		ok = checkSMTP(acct, stdout, stderr) && ok
 	}
 
 	return ok
+}
+
+// checkIMAP connects, lists folders and prints them. It is the half -check had first.
+func checkIMAP(acct *config.Account, stdout, stderr io.Writer, mailOptions ...mail.Option) bool {
+	source := "plaintext"
+	if acct.IMAP.Password == "" {
+		source = "command"
+	}
+
+	password, err := acct.IMAPPassword()
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", acct.Name, err)
+		return false
+	}
+
+	client, err := mail.Connect(*acct, password, mailOptions...)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", acct.Name, err)
+		return false
+	}
+
+	folders, listErr := client.Folders()
+	closeErr := client.Close()
+
+	if listErr != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", acct.Name, listErr)
+		return false
+	}
+	folders = mail.FilterFolders(folders, acct.IMAP.HideFolders)
+
+	ok := true
+	if closeErr != nil {
+		fmt.Fprintf(stderr, "%s: logout: %v\n", acct.Name, closeErr)
+		ok = false
+	}
+
+	tlsMode := "implicit"
+	if acct.IMAP.UseTLS != nil && !*acct.IMAP.UseTLS {
+		tlsMode = "starttls"
+	}
+
+	fmt.Fprintf(stdout, "%s: %s as %s, credential=%s, tls=%s, folders=%d\n",
+		acct.Name, acct.IMAPAddress(), acct.IMAP.Username, source, tlsMode, len(folders))
+
+	for _, folder := range folders {
+		role := folder.Role()
+		if role == mail.RoleNone {
+			continue
+		}
+		fmt.Fprintf(stdout, "  %-8s %s\n", role, folder.Name)
+	}
+
+	return ok
+}
+
+// checkSMTP proves the outgoing half without sending anything. A send failure is the one
+// the user cannot easily reason about afterwards, so it is worth catching before composing
+// (#66).
+func checkSMTP(acct *config.Account, stdout, stderr io.Writer) bool {
+	source := "plaintext"
+	if acct.SMTP.Password == "" {
+		source = "command"
+	}
+
+	password, err := acct.SMTPPassword()
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: smtp: %v\n", acct.Name, err)
+		return false
+	}
+
+	if err := mail.CheckSMTP(*acct, password); err != nil {
+		fmt.Fprintf(stderr, "%s: smtp %s: %v\n", acct.Name, acct.SMTPAddress(), err)
+		return false
+	}
+
+	tlsMode := "implicit"
+	if acct.SMTP.UseTLS != nil && !*acct.SMTP.UseTLS {
+		tlsMode = "starttls"
+	}
+
+	// The host fallback is invisible in the config file, so say which rule produced it.
+	hostSource := "configured"
+	if acct.SMTP.HostInherited() {
+		hostSource = "inherited"
+	}
+
+	fmt.Fprintf(stdout, "%s: smtp %s as %s, credential=%s, tls=%s, host=%s\n",
+		acct.Name, acct.SMTPAddress(), acct.SMTP.Username, source, tlsMode, hostSource)
+
+	return true
 }
 
 // defaultConfigPath is $XDG_CONFIG_HOME/chute/config.toml.
