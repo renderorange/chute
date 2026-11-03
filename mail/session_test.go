@@ -36,6 +36,13 @@ type fakeClient struct {
 	moveUIDs   []imap.UID
 	moveErr    error
 
+	purgeFolder string
+	purgeUIDs   []imap.UID
+	purgeErr    error
+
+	emptyFolder string
+	emptyErr    error
+
 	compose     *Compose
 	appendCalls []appendCall
 	appendErr   error
@@ -196,6 +203,31 @@ func (f *fakeClient) MoveToFolder(folder, dest string, uids []imap.UID) error {
 
 	if f.moveErr != nil {
 		return f.moveErr
+	}
+
+	return f.err
+}
+
+// PurgeMessages records a permanent delete of named UIDs.
+func (f *fakeClient) PurgeMessages(folder string, uids []imap.UID) error {
+	f.requests++
+	f.purgeFolder = folder
+	f.purgeUIDs = uids
+
+	if f.purgeErr != nil {
+		return f.purgeErr
+	}
+
+	return f.err
+}
+
+// EmptyFolder records an explicit empty of one mailbox.
+func (f *fakeClient) EmptyFolder(folder string) error {
+	f.requests++
+	f.emptyFolder = folder
+
+	if f.emptyErr != nil {
+		return f.emptyErr
 	}
 
 	return f.err

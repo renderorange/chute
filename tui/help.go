@@ -77,6 +77,7 @@ func helpGroups() []helpGroup {
 				helpAction(actionArchive, "archive"),
 				helpAction(actionJunk, "junk"),
 				helpAction(actionMove, "move to folder"),
+				helpAction(actionEmptyTrash, "empty Trash"),
 				helpAction(actionToggleFlag, "flag"),
 				helpAction(actionToggleRead, "read/unread"),
 				helpAction(actionAttachments, "attachments"),

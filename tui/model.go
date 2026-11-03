@@ -86,6 +86,7 @@ type Model struct {
 	confirmOpen   bool
 	confirmKind   confirmKind
 	pendingDelete []imap.UID
+	pendingEmpty  int
 
 	// filter narrows the loaded list; filterOpen is the prompt that edits it.
 	filter     string
@@ -111,6 +112,8 @@ type Model struct {
 	deleteMessages   deleteMessagesFunc
 	moveToRole       moveToRoleFunc
 	moveToFolder     moveToFolderFunc
+	purgeMessages    purgeMessagesFunc
+	emptyTrash       emptyTrashFunc
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
 	appendSent       appendSentFunc
@@ -141,6 +144,8 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		deleteMessages:   load.deleteMessages,
 		moveToRole:       load.moveToRole,
 		moveToFolder:     load.moveToFolder,
+		purgeMessages:    load.purgeMessages,
+		emptyTrash:       load.emptyTrash,
 		fetchCompose:     load.fetchCompose,
 		saveDraft:        load.saveDraft,
 		appendSent:       load.appendSent,
@@ -453,6 +458,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m.afterMoveSuccess(msg.uids, msg.dest)
 
+	case purgeMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.status = statusText(msg.err)
+
+			return m, nil
+		}
+
+		return m.afterRemoval(msg.uids, fmt.Sprintf("deleted %s permanently", countLabel(len(msg.uids), "message")))
+
+	case emptyTrashMsg:
+		if msg.account != m.accountName() || msg.folder != m.openFolder {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.status = statusText(msg.err)
+
+			return m, nil
+		}
+
+		return m.afterRemoval(msg.uids, fmt.Sprintf("emptied Trash (%s)", countLabel(len(msg.uids), "message")))
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -522,6 +553,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionAccount:
 		return m.openAccounts()
+
+	case actionEmptyTrash:
+		return m.beginEmptyTrash()
 
 	case actionHelp:
 		m.helpOpen = true

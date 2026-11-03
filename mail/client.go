@@ -365,6 +365,63 @@ func (c *Client) DeleteMessages(folder, trash string, uids []imap.UID) error {
 	return c.MoveToFolder(folder, trash, uids)
 }
 
+// PurgeMessages deletes exactly the listed UIDs from folder. It needs UIDPLUS so the
+// expunge can name the selection; without it the only alternative is a folder-wide
+// EXPUNGE, which is refused because that destroys mail the user did not select.
+func (c *Client) PurgeMessages(folder string, uids []imap.UID) error {
+	if len(uids) == 0 {
+		return nil
+	}
+	if !c.Supports(imap.CapUIDPlus) {
+		return fmt.Errorf("%w: account %q: deleting from %q needs UIDPLUS", ErrNoSafePurge, c.account, folder)
+	}
+
+	if _, err := c.conn.Select(folder, nil).Wait(); err != nil {
+		return fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
+	}
+
+	cmd := c.conn.Store(uidSet(uids), &imap.StoreFlags{
+		Op:     imap.StoreFlagsAdd,
+		Silent: true,
+		Flags:  []imap.Flag{imap.FlagDeleted},
+	}, nil)
+	if err := cmd.Close(); err != nil {
+		return fmt.Errorf("mail: account %q: marking messages deleted in %q: %w", c.account, folder, err)
+	}
+
+	if err := c.conn.UIDExpunge(uidSet(uids)).Close(); err != nil {
+		return fmt.Errorf("mail: account %q: expunging deleted messages in %q: %w", c.account, folder, err)
+	}
+
+	return nil
+}
+
+// EmptyFolder deletes every message in folder with one folder-wide EXPUNGE. It exists
+// only for the user's explicit empty-Trash action: the design permits a whole-mailbox
+// expunge there and nowhere else.
+func (c *Client) EmptyFolder(folder string) error {
+	if _, err := c.conn.Select(folder, nil).Wait(); err != nil {
+		return fmt.Errorf("mail: account %q: opening %q: %w", c.account, folder, err)
+	}
+
+	// EXPUNGE only removes messages already marked deleted, so mark the whole mailbox
+	// first. This is the one place a mailbox-wide range is deliberate.
+	cmd := c.conn.Store(allMessages(), &imap.StoreFlags{
+		Op:     imap.StoreFlagsAdd,
+		Silent: true,
+		Flags:  []imap.Flag{imap.FlagDeleted},
+	}, nil)
+	if err := cmd.Close(); err != nil {
+		return fmt.Errorf("mail: account %q: marking %q for deletion: %w", c.account, folder, err)
+	}
+
+	if err := c.conn.Expunge().Close(); err != nil {
+		return fmt.Errorf("mail: account %q: emptying %q: %w", c.account, folder, err)
+	}
+
+	return nil
+}
+
 // copyAndPurge deletes without the MOVE extension: copy to Trash, mark the copies
 // \Deleted in the source, then expunge exactly those UIDs.
 func (c *Client) copyAndPurge(folder, dest string, uids []imap.UID) error {
