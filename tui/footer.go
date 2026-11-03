@@ -155,6 +155,12 @@ func (m Model) footerHints() []footerHint {
 			hint(actionOpen, "save"),
 			hint(actionBack, "close"),
 		}
+	case m.moveOpen:
+		return []footerHint{
+			hintPair(actionUp, actionDown, "choose"),
+			hint(actionOpen, "move"),
+			hint(actionBack, "close"),
+		}
 	case m.foldersOpen:
 		return []footerHint{
 			hintPair(actionUp, actionDown, "choose"),

@@ -42,6 +42,7 @@ const (
 	KeyForward           = "forward"
 	KeyArchive           = "archive"
 	KeyJunk              = "junk"
+	KeyMove              = "move"
 	KeyHelp              = "help"
 )
 
@@ -75,6 +76,7 @@ var keyDefaults = map[string][]string{
 	KeyForward:           {"F"},
 	KeyArchive:           {"A"},
 	KeyJunk:              {"!"},
+	KeyMove:              {"M"},
 	KeyHelp:              {"?"},
 }
 
