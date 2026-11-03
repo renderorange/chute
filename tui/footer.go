@@ -121,7 +121,7 @@ func packHints(b bindings, hints []footerHint, width int) string {
 }
 
 // footerHints lists the hints for the current context, in priority order: the
-// keys that prevent a mistake first (delete, flag, read, open, quit). The list is
+// keys that prevent a mistake first (delete, flag, move, open, quit). The list is
 // deliberately short — the footer is a reminder of the keys used most, not the
 // keymap, and a wall of hints is unreadable. Everything else belongs in the help
 // screen (#21). A context lists only the keys it honours, and the width budget in
@@ -175,7 +175,7 @@ func (m Model) footerHints() []footerHint {
 		return []footerHint{
 			hint(actionDelete, "delete"),
 			hint(actionToggleFlag, "flag"),
-			hint(actionToggleRead, "read"),
+			hint(actionMove, "move"),
 			hint(actionQuit, "quit"),
 			hint(actionBack, "cancel"),
 			hintPair(actionUp, actionDown, "extend"),
@@ -184,7 +184,7 @@ func (m Model) footerHints() []footerHint {
 		hints := []footerHint{
 			hint(actionDelete, "delete"),
 			hint(actionToggleFlag, "flag"),
-			hint(actionToggleRead, "read"),
+			hint(actionMove, "move"),
 			hint(actionQuit, "quit"),
 			hint(actionNextThreadMessage, "next"),
 			hint(actionPrevThreadMessage, "prev"),
@@ -200,7 +200,7 @@ func (m Model) footerHints() []footerHint {
 	hints := []footerHint{
 		hint(actionDelete, "delete"),
 		hint(actionToggleFlag, "flag"),
-		hint(actionToggleRead, "read"),
+		hint(actionMove, "move"),
 		hint(actionOpen, "open"),
 		hint(actionQuit, "quit"),
 	}

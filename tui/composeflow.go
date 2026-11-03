@@ -212,10 +212,31 @@ func (m Model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.saveDraftCmd()
 
 	case composerSend:
-		return m, m.sendComposeCmd()
+		return m.beginSend()
 	}
 
 	return m, nil
+}
+
+// beginSend starts the send once. The SMTP round trip and the two mailbox writes can
+// take seconds, during which the composer stays on screen; without a status the app
+// looks hung, and without the guard a second ctrl+d sends the message twice.
+func (m Model) beginSend() (tea.Model, tea.Cmd) {
+	if m.compose == nil || m.sending {
+		return m, nil
+	}
+
+	cmd := m.sendComposeCmd()
+	if cmd == nil {
+		// Nothing to run, so nothing to report: setting the flag here would leave
+		// the composer unable to send, waiting for a result that never comes.
+		return m, nil
+	}
+
+	m.sending = true
+	m.status = "sending..."
+
+	return m, cmd
 }
 
 // messageFor builds the outgoing bytes for the composer's current contents.
@@ -402,6 +423,10 @@ func (m *Model) applyDraftSaved(msg draftSavedMsg) {
 // applySendResult reports the send outcome. The distinction that matters is between
 // "went out" and "filed", because a user who cannot tell them apart sends twice.
 func (m *Model) applySendResult(msg sendResultMsg) {
+	// Clear the in-flight flag even for another account's result: otherwise a send
+	// cut off by an account switch would leave the composer unable to send again.
+	m.sending = false
+
 	if msg.account != m.accountName() {
 		return
 	}

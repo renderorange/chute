@@ -58,6 +58,23 @@ func TestNavigationKeysAreArrowsOnly(t *testing.T) {
 	}
 }
 
+// TestMoveAndReadBindingsMatchTheIssue records #88's rebind: m moves a message, u
+// toggles read/unread, and the old uppercase M is gone rather than left behind as a
+// silent alias.
+func TestMoveAndReadBindingsMatchTheIssue(t *testing.T) {
+	b := defaultBindings()
+
+	for key, want := range map[string]action{
+		"m": actionMove,
+		"u": actionToggleRead,
+		"M": actionNone,
+	} {
+		if got := b.resolve(key); got != want {
+			t.Errorf("%q resolves to action %d, want %d", key, got, want)
+		}
+	}
+}
+
 // jkContexts builds one model per surface #27 names. Each already has a movable
 // cursor, so a bound j would visibly move it.
 func jkContexts(t *testing.T) []footerCase {

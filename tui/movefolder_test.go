@@ -60,15 +60,15 @@ func pickerNames(m Model) []string {
 	return names
 }
 
-// TestMoveKeyOpensThePicker covers the headline: M offers every selectable mailbox
+// TestMoveKeyOpensThePicker covers the headline: m offers every selectable mailbox
 // except the one the messages are already in.
 func TestMoveKeyOpensThePicker(t *testing.T) {
 	m, _ := withFolderMove(t, 3)
 
-	m = press(t, m, keyMsg("M"))
+	m = press(t, m, keyMsg("m"))
 
 	if !m.moveOpen {
-		t.Fatal("M did not open the move picker")
+		t.Fatal("m did not open the move picker")
 	}
 	if got := pickerNames(m); len(got) != 2 || got[0] != "Archive" || got[1] != "Projects" {
 		t.Errorf("picker = %v, want Archive and Projects", got)
@@ -88,7 +88,7 @@ func TestMovePickerMovesToTheChosenFolder(t *testing.T) {
 		t.Fatal("no message under the cursor")
 	}
 
-	m = press(t, m, keyMsg("M"))
+	m = press(t, m, keyMsg("m"))
 	m = press(t, m, keyMsg("down")) // Archive -> Projects
 	m = press(t, m, keyMsg("enter"))
 
@@ -116,7 +116,7 @@ func TestMovePickerMovesToTheChosenFolder(t *testing.T) {
 func TestMovePickerEscClosesWithoutMoving(t *testing.T) {
 	m, move := withFolderMove(t, 3)
 
-	m = press(t, m, keyMsg("M"))
+	m = press(t, m, keyMsg("m"))
 	m = press(t, m, keyMsg("esc"))
 
 	if m.moveOpen {
@@ -133,26 +133,26 @@ func TestMoveKeyWithoutOtherFoldersSaysSo(t *testing.T) {
 	m.loadMessages = fakeMessages(sampleMessages(2), nil)
 	m = openInbox(t, m)
 
-	m = press(t, m, keyMsg("M"))
+	m = press(t, m, keyMsg("m"))
 
 	if m.moveOpen {
-		t.Error("M opened a picker with no destination")
+		t.Error("m opened a picker with no destination")
 	}
 	if want := "no other folders"; m.status != want {
 		t.Errorf("status = %q, want %q", m.status, want)
 	}
 }
 
-// TestMoveKeyOutsideTheListIsInert proves the triage guard still applies: M from the
+// TestMoveKeyOutsideTheListIsInert proves the triage guard still applies: m from the
 // folders panel does nothing.
 func TestMoveKeyOutsideTheListIsInert(t *testing.T) {
 	m := loaded(t, 140, 40, moveFolders(), nil)
 	m.focus = focusFolders
 
-	m = press(t, m, keyMsg("M"))
+	m = press(t, m, keyMsg("m"))
 
 	if m.moveOpen {
-		t.Error("M opened the picker outside the message list")
+		t.Error("m opened the picker outside the message list")
 	}
 }
 
@@ -190,7 +190,7 @@ func TestMovePickerFitsTheFrame(t *testing.T) {
 	m.loadMessages = fakeMessages(sampleMessages(3), nil)
 	m = openInboxAnyMode(t, m)
 
-	m = press(t, m, keyMsg("M"))
+	m = press(t, m, keyMsg("m"))
 
 	assertExactFrame(t, m, "move picker")
 }

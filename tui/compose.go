@@ -178,6 +178,16 @@ func (c *composer) update(msg tea.KeyMsg) composerAction {
 		return composerNothing
 	}
 
+	// A lone space arrives as KeySpace, not KeyRunes, so checking only KeyRunes
+	// drops every space the user types. The filter and search prompts already
+	// special-case it; the composer must too.
+	if msg.Type == tea.KeySpace {
+		c.field().insert(" ")
+		c.dirty = true
+
+		return composerNothing
+	}
+
 	if msg.Type == tea.KeyRunes {
 		c.field().insert(string(msg.Runes))
 		c.dirty = true

@@ -18,7 +18,7 @@ type footerCase struct {
 // the budget fails here instead of being silently dropped. The owner asked for
 // this set to shrink to the mistake-preventing keys (#26): the footer is a
 // reminder, not the keymap, and the rest waits for the help screen.
-const footerDefaultHints = "d:delete f:flag m:read enter:open q:quit"
+const footerDefaultHints = "d:delete f:flag m:move enter:open q:quit"
 
 // footerCases builds one model per footer context. Every model is 105 columns
 // unless the case is about the composer, whose hints are wider.
@@ -182,7 +182,7 @@ func TestFooterDropsWholeHintsWhenItMust(t *testing.T) {
 	m := sized(40, 20)
 	footer := m.renderFooter()
 
-	const want = "d:delete f:flag m:read enter:open"
+	const want = "d:delete f:flag m:move enter:open"
 	if footer != want {
 		t.Errorf("footer at 40 = %q, want %q", footer, want)
 	}

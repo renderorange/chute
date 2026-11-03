@@ -93,7 +93,7 @@ func TestRebindingChangesDispatch(t *testing.T) {
 		t.Errorf("store calls = %d, want 1 for the rebound key", store.calls)
 	}
 
-	next, cmd = m.Update(keyMsg("m"))
+	next, cmd = m.Update(keyMsg("u"))
 	m = next.(Model)
 	if cmd != nil {
 		t.Fatal("the previously bound key still dispatched the action")
@@ -108,7 +108,7 @@ func TestRebindingChangesDispatch(t *testing.T) {
 func TestToggleReadMarksUnreadMessage(t *testing.T) {
 	m, store := withTriage(t, sampleMessages(2))
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 	m = deliver(t, m, cmd)
 
@@ -138,7 +138,7 @@ func TestToggleReadClearsWhenAllSeen(t *testing.T) {
 	messages[0].Flags = []imap.Flag{imap.FlagSeen}
 	m, store := withTriage(t, messages)
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 	m = deliver(t, m, cmd)
 
@@ -219,7 +219,7 @@ func TestVisualRangeSendsOneCommand(t *testing.T) {
 		m = next.(Model)
 	}
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 	m = deliver(t, m, cmd)
 
@@ -260,7 +260,7 @@ func TestFlagsFailureKeepsRows(t *testing.T) {
 	m, store := withTriage(t, sampleMessages(1))
 	store.err = errors.New("server said no")
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 	m = deliver(t, m, cmd)
 
@@ -515,7 +515,7 @@ func TestDeleteOnEmptyFolderReports(t *testing.T) {
 }
 
 // TestTriageKeysIgnoreOtherPanels proves a triage key does nothing while the
-// folder list owns the selection: pressing m there must not mark mail read.
+// folder list owns the selection: pressing u there must not mark mail read.
 func TestTriageKeysIgnoreOtherPanels(t *testing.T) {
 	m, store := withTriage(t, sampleMessages(2))
 
@@ -526,7 +526,7 @@ func TestTriageKeysIgnoreOtherPanels(t *testing.T) {
 		m = next.(Model)
 	}
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 
 	if cmd != nil || store.calls != 0 {
@@ -653,7 +653,7 @@ func TestExplicitFlagFailureIsNotQuiet(t *testing.T) {
 	m, store := withTriage(t, sampleMessages(1))
 	store.err = errors.New("mailbox is read-only")
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 	m = deliver(t, m, cmd)
 
@@ -667,7 +667,7 @@ func TestExplicitFlagFailureIsNotQuiet(t *testing.T) {
 func TestTriageKeysAreInertWithoutMessages(t *testing.T) {
 	m, store := withTriage(t, nil)
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 
 	if cmd != nil || store.calls != 0 {

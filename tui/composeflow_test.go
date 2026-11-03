@@ -181,6 +181,48 @@ func TestSendRunsTheThreeStepsInOrder(t *testing.T) {
 	}
 }
 
+// TestSendReportsItselfWhileItRuns is #88's second report. The SMTP round trip used to
+// leave the screen unchanged, and a second ctrl+d during it started a second send.
+func TestSendReportsItselfWhileItRuns(t *testing.T) {
+	m, fakes := withComposeModel(t)
+	m = press(t, m, keyMsg("r"))
+
+	next, cmd := m.Update(namedKey("ctrl+d"))
+	m = next.(Model)
+
+	if cmd == nil {
+		t.Fatal("ctrl+d did not start a send")
+	}
+	if want := "sending..."; m.status != want {
+		t.Errorf("status = %q, want %q while the send runs", m.status, want)
+	}
+	if view := m.View(); !strings.Contains(view, "sending...") {
+		t.Error("the frame does not show the send in progress")
+	}
+
+	next, second := m.Update(namedKey("ctrl+d"))
+	m = next.(Model)
+	if second != nil {
+		t.Error("a second ctrl+d started a second send")
+	}
+
+	m = deliver(t, m, cmd)
+
+	if want := "message sent"; m.status != want {
+		t.Errorf("status = %q, want %q after the send", m.status, want)
+	}
+
+	sends := 0
+	for _, step := range fakes.order {
+		if step == "send" {
+			sends++
+		}
+	}
+	if sends != 1 {
+		t.Errorf("send steps = %d (%v), want 1", sends, fakes.order)
+	}
+}
+
 // TestSendKeepsTheDraftWhenTheSentAppendFails is the partial failure the design calls
 // out: the mail went out, the copy was not filed, and the text must not be lost.
 func TestSendKeepsTheDraftWhenTheSentAppendFails(t *testing.T) {
