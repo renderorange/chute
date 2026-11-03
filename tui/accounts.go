@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/mail"
 )
 
@@ -105,6 +106,7 @@ func (m Model) selectAccount(index int) (tea.Model, tea.Cmd) {
 	m.loadingBody = bodyKey{}
 	m.readerScroll = 0
 	m.visualAnchor = noVisualAnchor
+	m.collapsed = make(map[imap.UID]bool)
 
 	m.attachOpen = false
 	m.attachCursor = 0

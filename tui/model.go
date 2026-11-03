@@ -63,6 +63,10 @@ type Model struct {
 	visualAnchor   int
 	markSeenOnLoad map[bodyKey]bool
 
+	// collapsed is keyed by a thread root UID: the folder's collapsed conversations.
+	// It resets with the folder, because a conversation belongs to one listing.
+	collapsed map[imap.UID]bool
+
 	attachOpen   bool
 	attachCursor int
 
@@ -157,6 +161,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		clock:            tea.Tick,
 		bodies:           make(map[bodyKey]*mail.Body),
 		markSeenOnLoad:   make(map[bodyKey]bool),
+		collapsed:        make(map[imap.UID]bool),
 		lastSeen:         make(map[folderKey]imap.UID),
 		visualAnchor:     noVisualAnchor,
 		keys:             bindingsFromConfig(cfg.KeyBindings()),
@@ -557,6 +562,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionEmptyTrash:
 		return m.beginEmptyTrash()
 
+	case actionCollapse:
+		return m.toggleCollapse()
+
 	case actionHelp:
 		m.helpOpen = true
 		m.helpScroll = 0
@@ -590,6 +598,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loadingBody = bodyKey{}
 		m.readerScroll = 0
 		m.visualAnchor = noVisualAnchor
+		m.collapsed = make(map[imap.UID]bool)
 		m.moveOpen = false
 		m.moveFolders = nil
 		m.moveCursor = 0
@@ -735,6 +744,7 @@ func (m Model) openFolderByName(name string, remember bool) (tea.Model, tea.Cmd)
 	m.loadingBody = bodyKey{}
 	m.readerScroll = 0
 	m.visualAnchor = noVisualAnchor
+	m.collapsed = make(map[imap.UID]bool)
 	m.attachOpen = false
 	m.attachCursor = 0
 	m.foldersOpen = false

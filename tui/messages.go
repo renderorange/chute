@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/config"
 	"github.com/renderorange/chute/mail"
 )
@@ -149,9 +150,11 @@ func (m Model) listColumns() []string {
 func (m Model) messageLine(index, width int) string {
 	msg := m.rows[index].Message
 
-	// ASCII markers keep every row one cell wide, so the date never wraps.
+	// ASCII markers keep every row one cell wide, so the date never wraps. A collapsed
+	// thread's root borrows the unread marker when any reply it hides is unread, so a
+	// fold cannot make mail look read (#59).
 	unread := " "
-	if !msg.Seen() {
+	if !msg.Seen() || m.rows[index].HiddenUnread {
 		unread = "*"
 	}
 	flagged := " "
@@ -167,6 +170,12 @@ func (m Model) messageLine(index, width int) string {
 	// The date is truncated and measured in display cells, not bytes: the layout comes
 	// from config, so a wide rune is user input and could otherwise widen the row.
 	date := TruncateDisplay(m.cfg.List.FormatDate(msg.Date().Local()), config.ListMaxDateCells)
+
+	// A collapsed root says how many replies it hides; the subject absorbs the cost.
+	subject := singleLine(msg.Subject())
+	if m.rows[index].Hidden > 0 {
+		subject = fmt.Sprintf("%s (%d)", subject, m.rows[index].Hidden)
+	}
 
 	// Widths of the columns that do not absorb space.
 	fixed := make(map[string]int, len(columns))
@@ -212,7 +221,7 @@ func (m Model) messageLine(index, width int) string {
 		case config.ListColumnFrom:
 			row.WriteString(padColumn(singleLine(msg.From()), fixed[col]))
 		case config.ListColumnSubject:
-			row.WriteString(padColumn(singleLine(msg.Subject()), subjectWidth))
+			row.WriteString(padColumn(subject, subjectWidth))
 		case config.ListColumnDate:
 			row.WriteString(date)
 		}
@@ -248,17 +257,31 @@ func (m Model) selectedMessage() (mail.Message, bool) {
 // applied here too, so a flag change or a delete cannot drop it.
 func (m *Model) rebuildRows() {
 	keep, hasCursor := m.selectedMessage()
-
-	m.rows = m.visibleRows()
+	rows, hiddenBy := collapseRows(m.visibleRows(), m.collapsed, m.filter == "")
+	m.rows = rows
 
 	if hasCursor {
-		for i, row := range m.rows {
-			if row.Message.UID == keep.UID {
-				m.messageCursor = i
-				break
+		index := rowIndex(rows, keep.UID)
+		if index < 0 {
+			if root, ok := hiddenBy[keep.UID]; ok {
+				index = rowIndex(rows, root)
 			}
+		}
+		if index >= 0 {
+			m.messageCursor = index
 		}
 	}
 
 	m.clampMessageScroll()
+}
+
+// rowIndex finds the row holding uid, or -1.
+func rowIndex(rows []Row, uid imap.UID) int {
+	for i, row := range rows {
+		if row.Message.UID == uid {
+			return i
+		}
+	}
+
+	return -1
 }
