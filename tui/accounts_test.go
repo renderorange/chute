@@ -329,3 +329,131 @@ func TestAccountSelectorKeepsTheLineWidthInvariant(t *testing.T) {
 		}
 	}
 }
+
+// threeAccounts extends the shipped two-account config, so a cycle has somewhere to wrap.
+func threeAccounts() *config.Config {
+	cfg := testConfig()
+	cfg.Accounts = append(cfg.Accounts, config.Account{Name: "third", StartFolder: startFolder("")})
+
+	return cfg
+}
+
+// TestCycleAccountsWrapsBothWays is #56: ] walks forward, [ walks back, and the ring wraps
+// with two or more accounts, which is the whole point of the key.
+func TestCycleAccountsWrapsBothWays(t *testing.T) {
+	m := sizedWith(threeAccounts(), 140, 40)
+
+	for _, want := range []int{1, 2, 0} {
+		next, _ := m.Update(keyMsg("]"))
+		m = next.(Model)
+
+		if m.account != want {
+			t.Fatalf("after ], account = %d, want %d", m.account, want)
+		}
+	}
+
+	for _, want := range []int{2, 1, 0} {
+		next, _ := m.Update(keyMsg("["))
+		m = next.(Model)
+
+		if m.account != want {
+			t.Fatalf("after [, account = %d, want %d", m.account, want)
+		}
+	}
+}
+
+// TestCycleAccountsResetsTheSwitch proves the cycle uses the modal's switch path: the
+// previous account's folders, messages and body cache do not leak into the next one, and the
+// start folder is re-armed.
+func TestCycleAccountsResetsTheSwitch(t *testing.T) {
+	m := sizedWith(threeAccounts(), 140, 40)
+	m.folders = sampleFolders(3)
+	m.openFolder = "INBOX"
+	m.messages = sampleMessages(2)
+	m.rows = BuildRows(m.messages)
+	m.bodies = map[bodyKey]*mail.Body{{account: "fastmail", folder: "INBOX", uid: 1}: {}}
+	m.markSeenOnLoad = map[bodyKey]bool{{account: "fastmail", folder: "INBOX", uid: 1}: true}
+	m.started = true
+
+	next, cmd := m.Update(keyMsg("]"))
+	m = next.(Model)
+
+	if m.account != 1 {
+		t.Fatalf("account = %d, want 1", m.account)
+	}
+	if cmd == nil {
+		t.Fatal("the cycle returned no folder load")
+	}
+	if m.folders != nil || len(m.messages) != 0 || len(m.bodies) != 0 || len(m.markSeenOnLoad) != 0 {
+		t.Error("the previous account's state survived the cycle")
+	}
+	if m.openFolder != "" || m.started {
+		t.Errorf("openFolder = %q, started = %v, want the new account's start folder", m.openFolder, m.started)
+	}
+
+	// Back to the first account, then forward again: the second visit must be as clean as
+	// the first, which catches state that was only cleared on the way out.
+	next, _ = m.Update(keyMsg("["))
+	m = next.(Model)
+	if m.account != 0 {
+		t.Fatalf("account = %d, want 0", m.account)
+	}
+	if m.folders != nil || len(m.messages) != 0 || m.started {
+		t.Error("the second switch reused the other account's state")
+	}
+}
+
+// TestCycleAccountsWithOneAccountIsInert: no movement and no status noise.
+func TestCycleAccountsWithOneAccountIsInert(t *testing.T) {
+	cfg := testConfig()
+	cfg.Accounts = cfg.Accounts[:1]
+	m := sizedWith(cfg, 140, 40)
+
+	for _, key := range []string{"]", "["} {
+		next, cmd := m.Update(keyMsg(key))
+		m = next.(Model)
+
+		if cmd != nil {
+			t.Errorf("%s started a load with one account", key)
+		}
+		if m.account != 0 || m.status != "" {
+			t.Errorf("%s: account = %d, status = %q, want 0 and empty", key, m.account, m.status)
+		}
+	}
+}
+
+// TestCycleKeepsTheSelectorCursorInStep proves the modal and the key agree: after a cycle,
+// opening the selector starts on the account the user is looking at.
+func TestCycleKeepsTheSelectorCursorInStep(t *testing.T) {
+	m := sizedWith(threeAccounts(), 140, 40)
+
+	next, _ := m.Update(keyMsg("]"))
+	m = next.(Model)
+
+	if m.accountCursor != m.account {
+		t.Errorf("selector cursor = %d, want the active account %d", m.accountCursor, m.account)
+	}
+}
+
+// TestCycleKeyCanBeRebound is the M6 property applied to the new actions: the handler follows
+// the binding, not the bracket.
+func TestCycleKeyCanBeRebound(t *testing.T) {
+	m := sizedWith(threeAccounts(), 140, 40)
+
+	keys := defaultBindings()
+	keys[actionAccountNext] = []string{"ctrl+n"}
+	m.keys = keys
+
+	next, _ := m.Update(keyMsg("ctrl+n"))
+	m = next.(Model)
+
+	if m.account != 1 {
+		t.Errorf("account = %d, want 1 after the rebound key", m.account)
+	}
+
+	next, cmd := m.Update(keyMsg("]"))
+	m = next.(Model)
+	if cmd != nil || m.account != 1 {
+		t.Error("the replaced default still cycled the account")
+	}
+}

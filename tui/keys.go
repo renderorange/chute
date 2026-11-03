@@ -23,6 +23,8 @@ const (
 	actionFoldersOverlay
 	actionReload
 	actionAccount
+	actionAccountNext
+	actionAccountPrev
 	actionToggleRead
 	actionToggleFlag
 	actionDelete
@@ -59,6 +61,8 @@ var actionNames = map[action]string{
 	actionFoldersOverlay:    config.KeyFoldersOverlay,
 	actionReload:            config.KeyReload,
 	actionAccount:           config.KeyAccount,
+	actionAccountNext:       config.KeyAccountNext,
+	actionAccountPrev:       config.KeyAccountPrev,
 	actionToggleRead:        config.KeyToggleRead,
 	actionToggleFlag:        config.KeyToggleFlag,
 	actionDelete:            config.KeyDelete,

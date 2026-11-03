@@ -65,6 +65,19 @@ func (m Model) handleAccountsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// cycleAccount moves to the next or previous account and reloads it. Wrapping is what makes
+// the key useful with two accounts; one account makes it inert rather than noisy. It reuses
+// selectAccount, so every reset rule of the modal applies (#56).
+func (m Model) cycleAccount(delta int) (tea.Model, tea.Cmd) {
+	if len(m.cfg.Accounts) < 2 {
+		return m, nil
+	}
+
+	next := (m.account + delta + len(m.cfg.Accounts)) % len(m.cfg.Accounts)
+
+	return m.selectAccount(next)
+}
+
 // selectAccount makes index the active account and reloads its folders.
 //
 // Nothing about the previous account survives except its open session: the folder
