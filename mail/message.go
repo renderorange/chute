@@ -22,6 +22,12 @@ type Message struct {
 	// folder. Both are empty for a thread root.
 	MessageID string
 	InReplyTo []string
+
+	// References is the ancestor chain, fetched as a header alongside the envelope because
+	// IMAP's ENVELOPE has no such field. It is the fallback when a sender sets References
+	// without In-Reply-To (#70). Ids are bare, like MessageID, so comparisons never mix
+	// bracket forms.
+	References []string
 }
 
 // SetFlag adds or removes a flag locally. It mirrors what the server confirmed,
