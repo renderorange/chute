@@ -115,7 +115,9 @@ type envelope struct {
 	rcpt []string
 }
 
-// envelopeOf reads From, To and Cc out of a built message.
+// envelopeOf reads From, To, Cc and Bcc out of a built message. The blind recipients are
+// read before StripBcc removes them for the Sent copy, which is why the delivered bytes
+// keep the header.
 func envelopeOf(msg []byte) (envelope, error) {
 	parsed, err := mail.ReadMessage(bytes.NewReader(msg))
 	if err != nil {
@@ -129,7 +131,7 @@ func envelopeOf(msg []byte) (envelope, error) {
 
 	var rcpt []string
 
-	for _, field := range []string{"To", "Cc"} {
+	for _, field := range []string{"To", "Cc", "Bcc"} {
 		value := strings.TrimSpace(parsed.Header.Get(field))
 		if value == "" {
 			continue
@@ -145,7 +147,7 @@ func envelopeOf(msg []byte) (envelope, error) {
 	}
 
 	if len(rcpt) == 0 {
-		return envelope{}, fmt.Errorf("reading the message: no To or Cc recipients")
+		return envelope{}, fmt.Errorf("reading the message: no To, Cc or Bcc recipients")
 	}
 
 	return envelope{from: from.Address, rcpt: rcpt}, nil

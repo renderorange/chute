@@ -65,6 +65,7 @@ func TestComposerTypesIntoTheFocusedField(t *testing.T) {
 	c.update(namedKey("tab"))
 	c.update(namedKey("tab"))
 	c.update(namedKey("tab"))
+	c.update(namedKey("tab"))
 	c.update(key('q'))
 
 	if got := c.compose().Text; got != "q" {
@@ -76,7 +77,7 @@ func TestComposerTypesIntoTheFocusedField(t *testing.T) {
 func TestComposerTabCyclesFields(t *testing.T) {
 	c := newComposer(mail.Compose{}, false)
 
-	want := []int{composerCc, composerSubject, composerBody, composerTo}
+	want := []int{composerCc, composerBcc, composerSubject, composerBody, composerTo}
 	for _, expected := range want {
 		c.update(namedKey("tab"))
 		if c.focus != expected {
@@ -100,6 +101,7 @@ func TestComposerEnterMovesBetweenHeaderFields(t *testing.T) {
 		t.Errorf("enter from To landed on %d, want Cc", c.focus)
 	}
 
+	c.update(namedKey("enter"))
 	c.update(namedKey("enter"))
 	c.update(namedKey("enter"))
 	if c.focus != composerBody {
@@ -157,6 +159,11 @@ func TestComposerComposeReflectsEdits(t *testing.T) {
 	}
 
 	c.update(namedKey("tab"))
+	for _, r := range "blind@example.com" {
+		c.update(key(r))
+	}
+
+	c.update(namedKey("tab"))
 	for _, r := range "the subject" {
 		c.update(key(r))
 	}
@@ -167,6 +174,9 @@ func TestComposerComposeReflectsEdits(t *testing.T) {
 	}
 	if len(got.Cc) != 1 || got.Cc[0] != "cc@example.com" {
 		t.Errorf("Cc = %v", got.Cc)
+	}
+	if len(got.Bcc) != 1 || got.Bcc[0] != "blind@example.com" {
+		t.Errorf("Bcc = %v", got.Bcc)
 	}
 	if got.Subject != "the subject" {
 		t.Errorf("Subject = %q", got.Subject)
@@ -195,6 +205,7 @@ func TestComposerViewShowsFieldsAndFits(t *testing.T) {
 	c := newComposer(mail.Compose{
 		To:      []string{"one@example.com"},
 		Cc:      []string{"two@example.com"},
+		Bcc:     []string{"three@example.com"},
 		Subject: "a subject",
 		Text:    "a body line",
 	}, false)
@@ -207,7 +218,7 @@ func TestComposerViewShowsFieldsAndFits(t *testing.T) {
 		}
 
 		joined := strings.Join(rows, "\n")
-		for _, want := range []string{"To:", "Cc:", "Subject:", "a body line"} {
+		for _, want := range []string{"To:", "Cc:", "Bcc:", "Subject:", "a body line"} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("%dx%d: the view is missing %q:\n%s", size.width, size.height, want, joined)
 			}

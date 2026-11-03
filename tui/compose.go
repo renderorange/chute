@@ -25,15 +25,17 @@ const (
 const (
 	composerTo = iota
 	composerCc
+	composerBcc
 	composerSubject
 	composerBody
-	composerFields = 4
+	composerFields = 5
 )
 
-// composer is the in-pane writing surface: three single-line header fields and a body.
+// composer is the in-pane writing surface: four single-line header fields and a body.
 type composer struct {
 	to      *editor
 	cc      *editor
+	bcc     *editor
 	subject *editor
 	body    *editor
 
@@ -58,12 +60,14 @@ func newComposer(initial mail.Compose, bottom bool) *composer {
 	c := &composer{
 		to:      newEditor(true),
 		cc:      newEditor(true),
+		bcc:     newEditor(true),
 		subject: newEditor(true),
 		body:    newEditor(false),
 	}
 
 	c.to.setText(strings.Join(initial.To, ", "))
 	c.cc.setText(strings.Join(initial.Cc, ", "))
+	c.bcc.setText(strings.Join(initial.Bcc, ", "))
 	c.subject.setText(initial.Subject)
 	c.body.setText(initial.Text)
 	c.id = initial.MessageID
@@ -86,6 +90,8 @@ func (c *composer) field() *editor {
 		return c.to
 	case composerCc:
 		return c.cc
+	case composerBcc:
+		return c.bcc
 	case composerSubject:
 		return c.subject
 	}
@@ -101,6 +107,7 @@ func (c *composer) compose() mail.Compose {
 	return mail.Compose{
 		To:         splitField(c.to.text()),
 		Cc:         splitField(c.cc.text()),
+		Bcc:        splitField(c.bcc.text()),
 		Subject:    c.subject.text(),
 		Text:       c.body.text(),
 		MessageID:  c.id,
@@ -185,6 +192,7 @@ func (c *composer) view(width, height int) []string {
 	rows := []string{
 		c.fieldLine("To:      ", c.to, composerTo, width),
 		c.fieldLine("Cc:      ", c.cc, composerCc, width),
+		c.fieldLine("Bcc:     ", c.bcc, composerBcc, width),
 		c.fieldLine("Subject: ", c.subject, composerSubject, width),
 		"",
 	}
