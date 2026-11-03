@@ -13,20 +13,6 @@ import (
 // errSessionClosed is returned when a session is used after Close.
 var errSessionClosed = errors.New("mail: session is closed")
 
-// ErrAlreadyInTrash reports that a delete was asked for inside the trash mailbox itself.
-// It is typed so the interface can say "already in Trash" instead of echoing the wrapped
-// account context at the user.
-var ErrAlreadyInTrash = errors.New("mail: already the trash folder")
-
-// ErrAlreadyInRoleFolder reports a move into the mailbox the messages already live in.
-// It is the archive and junk analogue of ErrAlreadyInTrash.
-var ErrAlreadyInRoleFolder = errors.New("mail: already in that folder")
-
-// ErrNoRoleFolder reports that no mailbox serves a role and no override names one.
-// Callers match it with errors.Is to distinguish "cannot file a copy" from a real
-// protocol failure.
-var ErrNoRoleFolder = errors.New("mail: no mailbox serves the role")
-
 // sessionClient is the connected-client surface a session reuses.
 type sessionClient interface {
 	Folders() ([]Folder, error)
@@ -120,7 +106,8 @@ func (s *Session) Delete(folder string, uids []imap.UID) error {
 
 	trash, ok := s.roleFolderLocked(RoleTrash)
 	if !ok {
-		return fmt.Errorf("mail: account %q: no mailbox serves the trash role; set [accounts.imap] trash", s.acct.Name)
+		return fmt.Errorf("%w: account %q: no mailbox serves the trash role; set [accounts.imap] trash",
+			ErrNoRoleFolder, s.acct.Name)
 	}
 	if strings.EqualFold(folder, trash.Name) {
 		return fmt.Errorf("%w: account %q: %q", ErrAlreadyInTrash, s.acct.Name, folder)

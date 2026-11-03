@@ -63,7 +63,7 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	if msg.err != nil {
 		// A failed poll is silent in the list and visible in the status bar. The
 		// next tick recovers, and no dialog interrupts what the user is doing.
-		m.status = msg.err.Error()
+		m.status = statusText(msg.err)
 
 		return nil
 	}
@@ -141,7 +141,7 @@ func (m Model) reconcileCmd(account, folder string) tea.Cmd {
 // neighbour, the same discipline as a local delete.
 func (m *Model) applyUIDs(msg uidsMsg) {
 	if msg.err != nil {
-		m.status = msg.err.Error()
+		m.status = statusText(msg.err)
 
 		return
 	}

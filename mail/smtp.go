@@ -52,17 +52,17 @@ func sendMessage(acct config.Account, password string, msg []byte, dial smtpDial
 
 	conn, err := dial(acct.SMTPAddress(), implicitTLS, tlsConfig)
 	if err != nil {
-		return fmt.Errorf("mail: account %q: connect to %s: %w", acct.Name, acct.SMTPAddress(), err)
+		return fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
 	}
 	defer conn.Close()
 
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		return fmt.Errorf("mail: account %q: connect to %s: %w", acct.Name, acct.SMTPAddress(), err)
+		return fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
 	}
 
 	client, err := smtp.NewClient(conn, acct.SMTP.Host)
 	if err != nil {
-		return fmt.Errorf("mail: account %q: connect to %s: %w", acct.Name, acct.SMTPAddress(), err)
+		return fmt.Errorf("%w: account %q: connect to %s: %w", ErrConnect, acct.Name, acct.SMTPAddress(), err)
 	}
 	defer client.Close()
 
@@ -77,7 +77,7 @@ func sendMessage(acct config.Account, password string, msg []byte, dial smtpDial
 	if ok, _ := client.Extension("AUTH"); ok {
 		auth := smtp.PlainAuth("", acct.SMTP.Username, password, acct.SMTP.Host)
 		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("mail: account %q: auth as %s: %w", acct.Name, acct.SMTP.Username, err)
+			return fmt.Errorf("%w: account %q: auth as %s: %w", ErrAuth, acct.Name, acct.SMTP.Username, err)
 		}
 	}
 

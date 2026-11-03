@@ -54,12 +54,12 @@ func connectWith(dial dialFunc, acct config.Account, password string, opts ...Op
 
 	conn, err := dial(acct.IMAPAddress(), options)
 	if err != nil {
-		return nil, fmt.Errorf("mail: account %q: connecting to %s: %w", acct.Name, acct.IMAPAddress(), err)
+		return nil, fmt.Errorf("%w: account %q: connecting to %s: %w", ErrConnect, acct.Name, acct.IMAPAddress(), err)
 	}
 
 	if err := conn.Login(acct.IMAP.Username, password).Wait(); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("mail: account %q: login as %s failed: %w", acct.Name, acct.IMAP.Username, err)
+		return nil, fmt.Errorf("%w: account %q: login as %s failed: %w", ErrAuth, acct.Name, acct.IMAP.Username, err)
 	}
 
 	caps, capsErr := conn.Capability().Wait()
@@ -338,7 +338,7 @@ func (c *Client) MoveToFolder(folder, dest string, uids []imap.UID) error {
 		return c.copyAndPurge(folder, dest, uids)
 	}
 
-	return fmt.Errorf("mail: account %q: moving from %q needs MOVE or UIDPLUS; the server advertises neither", c.account, folder)
+	return fmt.Errorf("%w: account %q: moving from %q needs MOVE or UIDPLUS", ErrNoMoveSupport, c.account, folder)
 }
 
 // DeleteMessages moves messages to the trash mailbox through MoveToFolder, so the
