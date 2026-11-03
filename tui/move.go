@@ -24,6 +24,9 @@ func (m Model) moveSelectionTo(role mail.Role) (tea.Model, tea.Cmd) {
 	if !m.triageReady() {
 		return m, nil
 	}
+	if next, blocked := m.resultsOnly(); blocked {
+		return next, nil
+	}
 
 	uids := m.actionUIDs()
 	if len(uids) == 0 {

@@ -27,6 +27,9 @@ func (m Model) beginMove() (tea.Model, tea.Cmd) {
 	if !m.triageReady() {
 		return m, nil
 	}
+	if next, blocked := m.resultsOnly(); blocked {
+		return next, nil
+	}
 
 	if len(m.actionUIDs()) == 0 {
 		m.status = "no message selected"

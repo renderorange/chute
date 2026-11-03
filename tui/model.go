@@ -67,6 +67,15 @@ type Model struct {
 	// It resets with the folder, because a conversation belongs to one listing.
 	collapsed map[imap.UID]bool
 
+	// searchOpen is the server-search prompt; searchActive means the list shows its
+	// transient results. searchReturn* remember where the folder list was.
+	searchOpen         bool
+	searchQuery        string
+	searchActive       bool
+	searchResults      []mail.Message
+	searchReturnCursor int
+	searchReturnScroll int
+
 	attachOpen   bool
 	attachCursor int
 
@@ -126,6 +135,7 @@ type Model struct {
 	countUnseen      unseenFunc
 	pollFolder       pollFunc
 	countUIDs        uidsFunc
+	searchMessages   searchFuncs
 
 	keys bindings
 }
@@ -158,6 +168,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		countUnseen:      load.countUnseen,
 		pollFolder:       load.pollFolder,
 		countUIDs:        load.countUIDs,
+		searchMessages:   load.search,
 		clock:            tea.Tick,
 		bodies:           make(map[bodyKey]*mail.Body),
 		markSeenOnLoad:   make(map[bodyKey]bool),
@@ -489,6 +500,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m.afterRemoval(msg.uids, fmt.Sprintf("emptied Trash (%s)", countLabel(len(msg.uids), "message")))
 
+	case searchMsg:
+		m.applySearch(msg)
+
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -521,6 +537,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.compose != nil {
 		return m.handleComposeKey(msg)
 	}
+	if m.searchOpen {
+		return m.handleSearchKey(msg)
+	}
 	if m.filterOpen {
 		return m.handleFilterKey(msg)
 	}
@@ -536,6 +555,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = m.prevFocus()
 
 	case actionBack:
+		if m.searchActive {
+			m.leaveSearch()
+			return m, nil
+		}
 		if m.visualActive() {
 			m.visualAnchor = noVisualAnchor
 			break
@@ -571,6 +594,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionCollapse:
 		return m.toggleCollapse()
 
+	case actionSearch:
+		return m.beginSearch()
+
 	case actionHelp:
 		m.helpOpen = true
 		m.helpScroll = 0
@@ -605,6 +631,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.readerScroll = 0
 		m.visualAnchor = noVisualAnchor
 		m.collapsed = make(map[imap.UID]bool)
+		m.clearSearch()
 		m.moveOpen = false
 		m.moveFolders = nil
 		m.moveCursor = 0
@@ -751,6 +778,7 @@ func (m Model) openFolderByName(name string, remember bool) (tea.Model, tea.Cmd)
 	m.readerScroll = 0
 	m.visualAnchor = noVisualAnchor
 	m.collapsed = make(map[imap.UID]bool)
+	m.clearSearch()
 	m.attachOpen = false
 	m.attachCursor = 0
 	m.foldersOpen = false
@@ -958,6 +986,10 @@ func (m Model) View() string {
 	case m.foldersOpen:
 		if overlay := m.renderFoldersOverlay(ContentWidth(m.width), ContentHeight(m.height)); overlay != "" {
 			panels = overlay
+		}
+	case m.searchOpen:
+		if modal := m.renderSearchModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
 		}
 	case m.filterOpen:
 		if modal := m.renderFilterModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {

@@ -87,6 +87,7 @@ type loaders struct {
 	countUnseen      unseenFunc
 	pollFolder       pollFunc
 	countUIDs        uidsFunc
+	search           searchFuncs
 }
 
 // sessionLoaders binds every loader to one persistent session per account, so
@@ -142,6 +143,9 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		countUnseen: func(acct config.Account, folder string) (uint32, error) {
 			return manager.For(acct).Unseen(folder)
+		},
+		search: func(acct config.Account, folder, query string) ([]mail.Message, error) {
+			return manager.For(acct).Search(folder, query)
 		},
 		pollFolder: func(acct config.Account, folder string, since imap.UID) (mail.PollResult, error) {
 			return manager.For(acct).Poll(folder, since)

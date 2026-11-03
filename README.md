@@ -180,6 +180,7 @@ Composer keys are fixed, not part of `[keys]`:
 | `bottom` | `end`, `G` | Last message. |
 | `open` | `enter` | Open the message, or load the folder under the cursor. |
 | `filter` | `/` | Fuzzy, case-insensitive filter over the loaded list's sender, subject and recipients. |
+| `search` | `S` | Server-side search of the open folder; free text plus `from:`, `subject:`, `text:`, `body:` and `since:YYYY-MM-DD`. `esc` returns to the folder. |
 | `visual_range` | `v` | Anchor a selection range for the actions below. |
 | `delete` | `d` | Move to Trash; inside Trash, delete permanently after a confirmation. |
 | `archive` | `A` | Move to the archive mailbox. |
@@ -234,7 +235,9 @@ Composer keys are fixed, not part of `[keys]`:
   the copy filed in Sent has the header removed, so Sent does not record who was blind
   copied.
 - **No encryption or signing.** No PGP, no S/MIME.
-- **No server-side search.** `/` filters the messages already loaded in the open folder.
+- **No all-folder search.** `S` runs a server search in the open folder only; there is no
+  cross-folder or all-mailbox search. `/` still filters the loaded list locally, with no
+  network.
 - **No cross-folder threads.** A conversation is grouped within one folder.
 - **One window.** There is no detached viewer or second account pane.
 

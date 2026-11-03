@@ -120,6 +120,7 @@ func (m Model) selectAccount(index int) (tea.Model, tea.Cmd) {
 	m.readerScroll = 0
 	m.visualAnchor = noVisualAnchor
 	m.collapsed = make(map[imap.UID]bool)
+	m.clearSearch()
 
 	m.attachOpen = false
 	m.attachCursor = 0

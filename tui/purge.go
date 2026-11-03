@@ -76,6 +76,9 @@ func (m Model) beginEmptyTrash() (tea.Model, tea.Cmd) {
 	if !m.triageReady() {
 		return m, nil
 	}
+	if next, blocked := m.resultsOnly(); blocked {
+		return next, nil
+	}
 	if !m.inTrash() {
 		m.status = "not in Trash"
 		return m, nil
