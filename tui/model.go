@@ -125,6 +125,10 @@ type Model struct {
 	composeDraftUID   imap.UID
 	composeDraftKnown bool
 
+	// sending is set while a send's three steps run. It exists so the screen can say
+	// what is happening and so a second ctrl+d cannot send the same message twice.
+	sending bool
+
 	loadFolders      loadFoldersFunc
 	loadMessages     loadMessagesFunc
 	loadBody         loadBodyFunc

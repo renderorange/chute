@@ -253,17 +253,17 @@ func TestReaderFlagTogglesLikeTheList(t *testing.T) {
 	}
 }
 
-// TestReaderReadTogglesLikeTheList proves m is honoured in the reading pane for
+// TestReaderReadTogglesLikeTheList proves u is honoured in the reading pane for
 // the same reason.
 func TestReaderReadTogglesLikeTheList(t *testing.T) {
 	m, store := withTriage(t, sampleMessages(2))
 	m.loadBody = uidBody()
 	m = openSelectedBody(t, m)
 
-	next, cmd := m.Update(keyMsg("m"))
+	next, cmd := m.Update(keyMsg("u"))
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("m in the reading pane returned no command")
+		t.Fatal("u in the reading pane returned no command")
 	}
 	m = deliver(t, m, cmd)
 

@@ -16,6 +16,12 @@ func key(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
+// spaceKey builds the message bubbletea delivers for a lone space: KeySpace, not
+// KeyRunes. Typing "a b" arrives as messages of two different types.
+func spaceKey() tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
+}
+
 // namedKey builds a key with a name, such as "tab" or "ctrl+s".
 func namedKey(name string) tea.KeyMsg {
 	switch name {
@@ -259,6 +265,30 @@ func TestComposerEditingKeys(t *testing.T) {
 
 	if !c.dirty {
 		t.Error("editing did not mark the composer dirty")
+	}
+}
+
+// TestComposerTypesSpaces is #88's first report. A space is delivered as KeySpace, so
+// a composer that accepts only KeyRunes silently loses every space the user types.
+func TestComposerTypesSpaces(t *testing.T) {
+	c := newComposer(mail.Compose{}, false)
+
+	c.update(spaceKey())
+	c.update(key('x'))
+
+	if got := c.to.text(); got != " x" {
+		t.Errorf("To = %q, want %q", got, " x")
+	}
+
+	c.focus = composerBody
+	c.update(spaceKey())
+	c.update(key('y'))
+
+	if got := c.body.text(); got != " y" {
+		t.Errorf("body = %q, want %q", got, " y")
+	}
+	if !c.dirty {
+		t.Error("a typed space did not mark the composer dirty")
 	}
 }
 

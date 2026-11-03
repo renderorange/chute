@@ -186,11 +186,11 @@ Composer keys are fixed, not part of `[keys]`:
 | `delete` | `d` | Move to Trash; inside Trash, delete permanently after a confirmation. |
 | `archive` | `A` | Move to the archive mailbox. |
 | `junk` | `!` | Move to the junk mailbox. |
-| `move` | `M` | Move to a mailbox chosen from a picker. |
+| `move` | `m` | Move to a mailbox chosen from a picker. |
 | `empty_trash` | `X` | Delete everything in Trash, after a confirmation. Only works inside Trash. |
 | `collapse` | `z` | Fold or unfold the conversation under the cursor. |
 | `toggle_flag` | `f` | Flag or unflag. |
-| `toggle_read` | `m` | Mark read or unread. |
+| `toggle_read` | `u` | Mark read or unread. |
 | `attachments` | `s` | List attachments and save them to `download_dir`. |
 
 ### Reader
@@ -202,9 +202,9 @@ Composer keys are fixed, not part of `[keys]`:
 | `delete` | `d` | Move to Trash; inside Trash, delete permanently after a confirmation. |
 | `archive` | `A` | Move to the archive mailbox. |
 | `junk` | `!` | Move to the junk mailbox. |
-| `move` | `M` | Move to a mailbox chosen from a picker. |
+| `move` | `m` | Move to a mailbox chosen from a picker. |
 | `toggle_flag` | `f` | Flag or unflag. |
-| `toggle_read` | `m` | Mark read or unread. |
+| `toggle_read` | `u` | Mark read or unread. |
 | `next_thread_message` | `n` | Next message in the same conversation. |
 | `prev_thread_message` | `p` | Previous message in the same conversation. |
 | `attachments` | `s` | List attachments and save them to `download_dir`. |

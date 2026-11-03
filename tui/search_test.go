@@ -185,7 +185,7 @@ func TestSearchResultsRefuseFolderChanges(t *testing.T) {
 		{"delete", "d"},
 		{"archive", "A"},
 		{"junk", "!"},
-		{"move", "M"},
+		{"move", "m"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, search := withSearch(t, 3)
