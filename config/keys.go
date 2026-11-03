@@ -18,6 +18,7 @@ const (
 	KeyQuit              = "quit"
 	KeyForceQuit         = "force_quit"
 	KeyNextPanel         = "next_panel"
+	KeyPrevPanel         = "prev_panel"
 	KeyBack              = "back"
 	KeyUp                = "up"
 	KeyDown              = "down"
@@ -50,6 +51,7 @@ var keyDefaults = map[string][]string{
 	KeyQuit:              {"q"},
 	KeyForceQuit:         {"ctrl+c"},
 	KeyNextPanel:         {"tab"},
+	KeyPrevPanel:         {"shift+tab"},
 	KeyBack:              {"esc"},
 	KeyUp:                {"up"},
 	KeyDown:              {"down"},

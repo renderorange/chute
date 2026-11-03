@@ -12,6 +12,7 @@ const (
 	actionQuit
 	actionForceQuit
 	actionNextPanel
+	actionPrevPanel
 	actionBack
 	actionUp
 	actionDown
@@ -44,6 +45,7 @@ var actionNames = map[action]string{
 	actionQuit:              config.KeyQuit,
 	actionForceQuit:         config.KeyForceQuit,
 	actionNextPanel:         config.KeyNextPanel,
+	actionPrevPanel:         config.KeyPrevPanel,
 	actionBack:              config.KeyBack,
 	actionUp:                config.KeyUp,
 	actionDown:              config.KeyDown,

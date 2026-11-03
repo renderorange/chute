@@ -481,6 +481,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionNextPanel:
 		m.focus = m.nextFocus()
 
+	case actionPrevPanel:
+		m.focus = m.prevFocus()
+
 	case actionBack:
 		if m.visualActive() {
 			m.visualAnchor = noVisualAnchor
@@ -788,36 +791,43 @@ func (m *Model) clampFocus() {
 	}
 }
 
+// focusRing lists the panels tab visits in the current mode, in forward order.
+// forward and backward cycling both walk this one slice, so the two directions
+// cannot disagree about the order: shift+tab is the same ring read the other way.
+func (m Model) focusRing() []panelFocus {
+	if m.layout().Mode == ModeTwo {
+		// ModeTwo shows folders in an overlay, never as a focused panel.
+		return []panelFocus{focusMessages, focusReader}
+	}
+
+	// ModeThree draws all three panels; ModeSingle shows the same three in the
+	// same order inside one panel.
+	return []panelFocus{focusFolders, focusMessages, focusReader}
+}
+
 // nextFocus advances focus to the next panel visible in the current mode.
 func (m Model) nextFocus() panelFocus {
-	switch m.layout().Mode {
-	case ModeThree:
-		switch m.focus {
-		case focusFolders:
-			return focusMessages
-		case focusMessages:
-			return focusReader
-		default:
-			return focusFolders
-		}
+	return m.stepFocus(1)
+}
 
-	case ModeTwo:
-		if m.focus == focusReader {
-			return focusMessages
-		}
+// prevFocus moves focus to the previous panel visible in the current mode.
+func (m Model) prevFocus() panelFocus {
+	return m.stepFocus(-1)
+}
 
-		return focusReader
+// stepFocus walks the mode's ring by delta and wraps at both ends.
+func (m Model) stepFocus(delta int) panelFocus {
+	ring := m.focusRing()
+
+	for i, panel := range ring {
+		if panel == m.focus {
+			return ring[(i+delta+len(ring))%len(ring)]
+		}
 	}
 
-	// ModeSingle: folders, messages and reader share the single panel.
-	switch m.focus {
-	case focusFolders:
-		return focusMessages
-	case focusMessages:
-		return focusReader
-	default:
-		return focusFolders
-	}
+	// A focus that is not on the ring (stale after a resize) starts the walk from
+	// the ring's first panel in either direction.
+	return ring[0]
 }
 
 // panelTitle names the pane shown in single-column mode.
