@@ -79,9 +79,9 @@ func TestFetchComposeRoundTripsDraft(t *testing.T) {
 		Cc:         []string{"three@example.com"},
 		Subject:    "Re: something",
 		Text:       "my reply",
-		MessageID:  "<draft-id@example.org>",
-		InReplyTo:  "<parent@example.org>",
-		References: []string{"<root@example.org>", "<parent@example.org>"},
+		MessageID:  "draft-id@example.org",
+		InReplyTo:  "parent@example.org",
+		References: []string{"root@example.org", "parent@example.org"},
 	}
 
 	raw, err := BuildMessage(original)
@@ -120,7 +120,7 @@ func TestFetchComposeRoundTripsDraft(t *testing.T) {
 	if len(got.Cc) != 1 || !strings.Contains(got.Cc[0], "three@example.com") {
 		t.Errorf("Cc = %v", got.Cc)
 	}
-	if len(got.References) != 2 || got.References[0] != "<root@example.org>" {
+	if len(got.References) != 2 || got.References[0] != "root@example.org" {
 		t.Errorf("References = %v", got.References)
 	}
 }

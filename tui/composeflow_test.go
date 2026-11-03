@@ -803,9 +803,9 @@ func TestReopenedDraftKeepsThreadingHeaders(t *testing.T) {
 			To:         []string{"one@example.com"},
 			Subject:    "Re: subject",
 			Text:       "draft text",
-			MessageID:  "<draft@example.org>",
-			InReplyTo:  "<parent@example.org>",
-			References: []string{"<grandparent@example.org>", "<parent@example.org>"},
+			MessageID:  "draft@example.org",
+			InReplyTo:  "parent@example.org",
+			References: []string{"grandparent@example.org", "parent@example.org"},
 		}, nil
 	}
 

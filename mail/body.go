@@ -122,8 +122,9 @@ func parseBody(raw []byte) (*Body, error) {
 
 	body := &Body{}
 	// The whole message was fetched, so its own References header is parsed here at no
-	// extra cost. A message with no References is ordinary mail, not an error.
-	body.References = strings.Fields(entity.Header.Get("References"))
+	// extra cost. A message with no References is ordinary mail, not an error. The ids
+	// are stored bare, matching the envelope, and BuildMessage adds the brackets (#71).
+	body.References = bareIDs(strings.Fields(entity.Header.Get("References")))
 
 	var htmlText string
 	unnamed := 0

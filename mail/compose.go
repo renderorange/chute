@@ -58,7 +58,7 @@ func BuildMessage(c Compose) ([]byte, error) {
 		return nil, errors.New("mail: composing a message with no From address")
 	}
 
-	id := c.MessageID
+	id := bareID(c.MessageID)
 	if id == "" {
 		id = generateMessageID(c.From)
 	}
@@ -71,15 +71,15 @@ func BuildMessage(c Compose) ([]byte, error) {
 	}
 	header.Set("Subject", c.Subject)
 	header.Set("Date", time.Now().Format(time.RFC1123Z))
-	header.Set("Message-ID", id)
+	header.Set("Message-ID", headerID(id))
 	header.Set("Content-Type", "text/plain; charset=utf-8")
 	header.Set("Content-Transfer-Encoding", "8bit")
 
-	if c.InReplyTo != "" {
-		header.Set("In-Reply-To", c.InReplyTo)
+	if inReplyTo := bareID(c.InReplyTo); inReplyTo != "" {
+		header.Set("In-Reply-To", headerID(inReplyTo))
 	}
-	if len(c.References) > 0 {
-		header.Set("References", strings.Join(c.References, " "))
+	if references := headerIDs(c.References); len(references) > 0 {
+		header.Set("References", strings.Join(references, " "))
 	}
 
 	var buf bytes.Buffer
@@ -151,11 +151,11 @@ func parseCompose(raw []byte) (*Compose, error) {
 		From:           from,
 		Subject:        subject,
 		Text:           body.Text,
-		MessageID:      strings.TrimSpace(entity.Header.Get("Message-ID")),
+		MessageID:      bareID(entity.Header.Get("Message-ID")),
 		To:             splitAddresses(entity.Header.Get("To")),
 		Cc:             splitAddresses(entity.Header.Get("Cc")),
-		InReplyTo:      firstToken(entity.Header.Get("In-Reply-To")),
-		References:     strings.Fields(entity.Header.Get("References")),
+		InReplyTo:      bareID(firstToken(entity.Header.Get("In-Reply-To"))),
+		References:     bareIDs(strings.Fields(entity.Header.Get("References"))),
 		HadAttachments: len(body.Attachments) > 0,
 	}, nil
 }
@@ -193,14 +193,15 @@ func firstToken(value string) string {
 	return fields[0]
 }
 
-// NewMessageID returns a fresh Message-ID in the given From address's domain. The
-// composer calls it once per message so the draft and the sent copy match.
+// NewMessageID returns a fresh bare Message-ID in the given From address's domain. The
+// composer calls it once per message so the draft and the sent copy match; BuildMessage
+// adds the angle brackets when it writes the header.
 func NewMessageID(from string) string {
 	return generateMessageID(from)
 }
 
-// generateMessageID builds a unique id in the From address's domain, falling back to
-// chute.local when the From value carries no domain.
+// generateMessageID builds a unique bare id in the From address's domain, falling back
+// to chute.local when the From value carries no domain.
 func generateMessageID(from string) string {
 	domain := "chute.local"
 
@@ -212,8 +213,8 @@ func generateMessageID(from string) string {
 
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {
-		return fmt.Sprintf("<%d@%s>", time.Now().UnixNano(), domain)
+		return fmt.Sprintf("%d@%s", time.Now().UnixNano(), domain)
 	}
 
-	return fmt.Sprintf("<%d.%s@%s>", time.Now().UnixNano(), hex.EncodeToString(random[:]), domain)
+	return fmt.Sprintf("%d.%s@%s", time.Now().UnixNano(), hex.EncodeToString(random[:]), domain)
 }

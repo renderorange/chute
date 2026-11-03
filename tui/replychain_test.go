@@ -14,15 +14,15 @@ func threadChainModel(t *testing.T) Model {
 	t.Helper()
 
 	messages := sampleMessages(1)
-	messages[0].MessageID = "<parent@example.org>"
-	messages[0].InReplyTo = []string{"<grandparent@example.org>"}
+	messages[0].MessageID = "parent@example.org"
+	messages[0].InReplyTo = []string{"grandparent@example.org"}
 
 	m, _ := withComposeModelMessages(t, messages)
 
 	// Replace the cached body with the one the server would return, chain included.
 	m.bodies[bodyKey{account: m.accountName(), folder: m.openFolder, uid: messages[0].UID}] = &mail.Body{
 		Text:       "original text",
-		References: []string{"<root@example.org>", "<grandparent@example.org>"},
+		References: []string{"root@example.org", "grandparent@example.org"},
 	}
 
 	return m
@@ -86,7 +86,7 @@ func TestReplyAllCarriesTheFullReferencesChain(t *testing.T) {
 // References header of its own still produces In-Reply-To plus a one-entry chain.
 func TestReplyWithoutAChainCarriesOneEntry(t *testing.T) {
 	messages := sampleMessages(1)
-	messages[0].MessageID = "<parent@example.org>"
+	messages[0].MessageID = "parent@example.org"
 
 	m, _ := withComposeModelMessages(t, messages)
 	m = press(t, m, keyMsg("r"))
@@ -110,13 +110,13 @@ func TestReplyWithoutAChainCarriesOneEntry(t *testing.T) {
 // bytes written to the server carry the whole chain, so reopening it cannot lose it.
 func TestDraftKeepsTheFullReferencesChain(t *testing.T) {
 	messages := sampleMessages(1)
-	messages[0].MessageID = "<parent@example.org>"
-	messages[0].InReplyTo = []string{"<grandparent@example.org>"}
+	messages[0].MessageID = "parent@example.org"
+	messages[0].InReplyTo = []string{"grandparent@example.org"}
 
 	m, fakes := withComposeModelMessages(t, messages)
 	m.bodies[bodyKey{account: m.accountName(), folder: m.openFolder, uid: messages[0].UID}] = &mail.Body{
 		Text:       "original text",
-		References: []string{"<root@example.org>", "<grandparent@example.org>"},
+		References: []string{"root@example.org", "grandparent@example.org"},
 	}
 
 	m = press(t, m, keyMsg("r"))
