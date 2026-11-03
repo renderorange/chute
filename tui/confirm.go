@@ -160,6 +160,7 @@ func (m *Model) forgetBodies(uids []imap.UID) {
 		key := bodyKey{account: m.accountName(), folder: m.openFolder, uid: uid}
 		delete(m.bodies, key)
 		delete(m.markSeenOnLoad, key)
+		delete(m.collapsed, uid)
 	}
 }
 

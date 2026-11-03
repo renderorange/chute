@@ -19,11 +19,14 @@ const MaxThreadDepth = 3
 const noParent = -1
 
 // Row is one message as the list draws it: the message itself, how deep it nests,
-// and which conversation it belongs to.
+// and which conversation it belongs to. Hidden and HiddenUnread are only non-zero on a
+// collapsed thread's root row: the replies folded into it.
 type Row struct {
-	Message mail.Message
-	Depth   int
-	Thread  int
+	Message      mail.Message
+	Depth        int
+	Thread       int
+	Hidden       int
+	HiddenUnread bool
 }
 
 // BuildRows groups messages into conversations and returns them in list order.

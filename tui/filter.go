@@ -94,18 +94,22 @@ func (m Model) visibleRows() []Row {
 func (m *Model) applyFilter() {
 	keep, hasCursor := m.selectedMessage()
 
-	m.rows = m.visibleRows()
+	rows, hiddenBy := collapseRows(m.visibleRows(), m.collapsed, m.filter == "")
+	m.rows = rows
 	m.messageScroll = 0
 	m.readerScroll = 0
 	m.visualAnchor = noVisualAnchor
 	m.messageCursor = 0
 
 	if hasCursor {
-		for i, row := range m.rows {
-			if row.Message.UID == keep.UID {
-				m.messageCursor = i
-				break
+		index := rowIndex(rows, keep.UID)
+		if index < 0 {
+			if root, ok := hiddenBy[keep.UID]; ok {
+				index = rowIndex(rows, root)
 			}
+		}
+		if index >= 0 {
+			m.messageCursor = index
 		}
 	}
 

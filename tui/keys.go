@@ -38,6 +38,7 @@ const (
 	actionJunk
 	actionMove
 	actionEmptyTrash
+	actionCollapse
 	actionHelp
 )
 
@@ -73,6 +74,7 @@ var actionNames = map[action]string{
 	actionJunk:              config.KeyJunk,
 	actionMove:              config.KeyMove,
 	actionEmptyTrash:        config.KeyEmptyTrash,
+	actionCollapse:          config.KeyCollapse,
 	actionHelp:              config.KeyHelp,
 }
 
