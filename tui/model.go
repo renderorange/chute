@@ -1090,7 +1090,7 @@ func (m Model) renderPanels(layout Layout) string {
 // cannot leave a stale hint behind, and the footer drops whole hints rather than
 // cutting one in half.
 func (m Model) renderFooter() string {
-	return MutedStyle.Render(packHints(m.keys, m.footerHints(), ContentWidth(m.width)))
+	return MutedStyle.Render(sanitizeDisplay(packHints(m.keys, m.footerHints(), ContentWidth(m.width))))
 }
 
 // statusForBar is the status as the bar shows it. Unknown errors keep their wrapped text,

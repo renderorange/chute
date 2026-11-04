@@ -76,8 +76,80 @@ func Blank(n int) string {
 // ellipsis is the ASCII ellipsis used when truncating a line.
 const ellipsis = "..."
 
+// sanitizeDisplay cleans one line of text before it is styled and drawn. It removes
+// characters whose cell width a terminal does not agree on with go-runewidth and
+// x/ansi, and folds Unicode spaces to an ASCII space.
+//
+// U+00AD is the one that bites in practice: a terminal advances one cell for a soft
+// hyphen while the width tables count zero, so a line lipgloss pads to the frame width
+// is one cell wider for every soft hyphen on it. The terminal wraps it, the view becomes
+// taller than the window, and bubbletea keeps the last height lines, which reads as every
+// pane jumping up. Marketing mail is full of soft hyphens, zero-width joiners and
+// no-break spaces used as invisible spacers.
+//
+// Call this before adding ANSI styling: it drops control characters, but keeps ESC so a
+// string that already carries the composer's cursor highlight survives. Mail text never
+// reaches here styled; sanitizeText is the strict variant used for message bodies.
+func sanitizeDisplay(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\r', '\n', '\t', '\v', '\f':
+			return ' '
+		case '\x1b':
+			return r
+		}
+
+		return cleanRune(r)
+	}, s)
+}
+
+// sanitizeText is sanitizeDisplay for a multi-line body: line breaks and tabs are kept,
+// so paragraph structure survives and wrapLine can still expand a tab.
+func sanitizeText(s string) string {
+	return strings.Map(cleanRune, s)
+}
+
+// cleanRune drops one rune that must never reach the terminal, or folds a Unicode space
+// to an ASCII one. Line breaks and tabs are the caller's decision.
+func cleanRune(r rune) rune {
+	if r == '\n' || r == '\t' {
+		return r
+	}
+
+	// C0, DEL and C1 controls: some terminals treat a vertical tab or NEL as a line
+	// break, which is the same frame-height hazard as a soft hyphen.
+	if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+		return -1
+	}
+
+	switch r {
+	case '\u00ad', // soft hyphen: one cell in a terminal, zero in the width tables
+		'\u034f',                     // combining grapheme joiner
+		'\u061c',                     // Arabic letter mark
+		'\u180e',                     // Mongolian vowel separator
+		'\u200b', '\u200c', '\u200d', // zero-width space, non-joiner, joiner
+		'\u200e', '\u200f', // left-to-right and right-to-left marks
+		'\u202a', '\u202b', '\u202c', '\u202d', '\u202e', // bidi embedding and override
+		'\u2060', '\u2061', '\u2062', '\u2063', '\u2064', // word joiner and invisible operators
+		'\u2066', '\u2067', '\u2068', '\u2069', // bidi isolates
+		'\ufeff',                     // zero-width no-break space
+		'\ufff9', '\ufffa', '\ufffb': // interlinear annotation
+		return -1
+	case '\u00a0', // no-break space
+		'\u1680',                                                                                                     // ogham space mark
+		'\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200a', // en/em/thin/hair spaces
+		'\u202f', // narrow no-break space
+		'\u205f', // medium mathematical space
+		'\u3000': // ideographic space
+		return ' '
+	}
+
+	return r
+}
+
 // Truncate shortens a plain string to width runes, appending an ellipsis when cut.
 func Truncate(s string, width int) string {
+	s = sanitizeDisplay(s)
 	if width < 1 {
 		return ""
 	}
@@ -96,6 +168,7 @@ func Truncate(s string, width int) string {
 // TruncateDisplay shortens a string to width display cells, counting wide runes
 // as two cells, and appends an ellipsis when cut.
 func TruncateDisplay(s string, width int) string {
+	s = sanitizeDisplay(s)
 	if width < 1 {
 		return ""
 	}
@@ -139,14 +212,7 @@ func padColumn(s string, width int) string {
 }
 
 // singleLine replaces embedded line breaks and tabs so a header cannot break a
-// list row.
+// list row, and drops characters the terminal measures differently.
 func singleLine(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch r {
-		case '\r', '\n', '\t':
-			return ' '
-		}
-
-		return r
-	}, s)
+	return sanitizeDisplay(s)
 }
