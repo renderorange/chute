@@ -72,10 +72,10 @@ func closeHelp(t *testing.T, m Model, key string) Model {
 // terminal is tall enough that the whole map renders at once; the 60x20 scroll test
 // covers the case where it does not fit.
 func TestHelpOpensAndListsTheContexts(t *testing.T) {
-	m := openHelp(t, sized(140, 60))
+	m := openHelp(t, sized(140, 80))
 	view := m.View()
 
-	for _, want := range []string{"keys", "global", "list", "reader", "composer", "modals"} {
+	for _, want := range []string{"keys", "global", "list", "selection", "reader", "composer", "modals"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("help is missing %q:\n%s", want, view)
 		}

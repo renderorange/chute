@@ -276,14 +276,14 @@ func (m Model) messageLine(index, width int) string {
 
 	line := row.String()
 
+	// Bold is the selection indicator and nothing else (#97). Unread mail keeps
+	// the marker column's "*", which survives in monochrome and does not compete
+	// with the cursor or a range for the one bold attribute.
 	if index == m.messageCursor {
 		return SelectedStyle.Render(line)
 	}
 	if m.inVisual(index) {
 		return SelectedStyle.Render(line)
-	}
-	if !msg.Seen() {
-		return UnreadStyle.Render(line)
 	}
 
 	return NormalStyle.Render(line)

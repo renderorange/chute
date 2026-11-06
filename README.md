@@ -186,7 +186,7 @@ Composer keys are fixed, not part of `[keys]`:
 | `delete` | `d` | Move to Trash; inside Trash, delete permanently after a confirmation. |
 | `archive` | `A` | Move to the archive mailbox. |
 | `junk` | `!` | Move to the junk mailbox. |
-| `move` | `m` | Move to a mailbox chosen from a picker. |
+| `move` | `m` | Move to a mailbox chosen from a picker; type to filter the folder list. |
 | `empty_trash` | `X` | Delete everything in Trash, after a confirmation. Only works inside Trash. |
 | `collapse` | `z` | Fold or unfold the conversation under the cursor. |
 | `toggle_flag` | `f` | Flag or unflag. |
@@ -202,7 +202,7 @@ Composer keys are fixed, not part of `[keys]`:
 | `delete` | `d` | Move to Trash; inside Trash, delete permanently after a confirmation. |
 | `archive` | `A` | Move to the archive mailbox. |
 | `junk` | `!` | Move to the junk mailbox. |
-| `move` | `m` | Move to a mailbox chosen from a picker. |
+| `move` | `m` | Move to a mailbox chosen from a picker; type to filter the folder list. |
 | `toggle_flag` | `f` | Flag or unflag. |
 | `toggle_read` | `u` | Mark read or unread. |
 | `next_thread_message` | `n` | Next message in the same conversation. |

@@ -89,6 +89,8 @@ type Model struct {
 	moveOpen    bool
 	moveCursor  int
 	moveFolders []mail.Folder
+	moveFilter  string
+	moveMatches []mail.Folder
 
 	accountsOpen  bool
 	accountCursor int
@@ -669,6 +671,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveOpen = false
 		m.moveFolders = nil
 		m.moveCursor = 0
+		m.moveFilter = ""
+		m.moveMatches = nil
 
 		m.attachOpen = false
 		m.attachCursor = 0
@@ -1085,12 +1089,44 @@ func (m Model) renderPanels(layout Layout) string {
 	return m.renderPanel(panelTitle(m.focus), layout.Reader, body, true)
 }
 
+// selectionText names how many messages the active range covers, so a bulk
+// action is never confirmed blind. It is empty when no range is active, which
+// leaves an ordinary footer unchanged.
+func (m Model) selectionText() string {
+	if !m.visualActive() {
+		return ""
+	}
+
+	n := len(m.actionUIDs())
+	if n == 0 {
+		return ""
+	}
+
+	return "selected " + countLabel(n, "message")
+}
+
+// hintSeparatorLen is the cells one separator costs, used when the selection
+// prefix takes part of the footer's width.
+const hintSeparatorLen = len(hintSeparator)
+
 // renderFooter shows the keys that work right now, in priority order, as many as
 // fit. The hints come from the binding table (tui/footer.go), so a rebound key
 // cannot leave a stale hint behind, and the footer drops whole hints rather than
-// cutting one in half.
+// cutting one in half. A live range leads with its count (#96), because the
+// range is invisible in the list once the unread bold is gone.
 func (m Model) renderFooter() string {
-	return MutedStyle.Render(sanitizeDisplay(packHints(m.keys, m.footerHints(), ContentWidth(m.width))))
+	width := ContentWidth(m.width)
+
+	text := packHints(m.keys, m.footerHints(), width)
+	if prefix := m.selectionText(); prefix != "" {
+		rest := width - lipgloss.Width(prefix) - hintSeparatorLen
+		text = prefix
+		if hints := packHints(m.keys, m.footerHints(), max(0, rest)); hints != "" {
+			text += hintSeparator + hints
+		}
+	}
+
+	return MutedStyle.Render(sanitizeDisplay(TruncateDisplay(text, width)))
 }
 
 // statusForBar is the status as the bar shows it. Unknown errors keep their wrapped text,
