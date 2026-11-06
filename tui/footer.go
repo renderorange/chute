@@ -175,11 +175,14 @@ func (m Model) footerHints() []footerHint {
 	case m.visualActive():
 		return []footerHint{
 			hint(actionDelete, "delete"),
-			hint(actionToggleFlag, "flag"),
+			hint(actionArchive, "archive"),
+			hint(actionJunk, "junk"),
 			hint(actionMove, "move"),
-			hint(actionQuit, "quit"),
+			hint(actionToggleFlag, "flag"),
+			hint(actionToggleRead, "read"),
 			hint(actionBack, "cancel"),
 			hintPair(actionUp, actionDown, "extend"),
+			hint(actionQuit, "quit"),
 		}
 	case m.focus == focusReader:
 		hints := []footerHint{

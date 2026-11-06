@@ -86,6 +86,20 @@ func helpGroups() []helpGroup {
 			},
 		},
 		{
+			title: "selection",
+			rows: []helpRow{
+				helpAction(actionVisualRange, "start or clear range"),
+				helpPair(actionUp, actionDown, "extend range"),
+				helpAction(actionDelete, "delete selected"),
+				helpAction(actionArchive, "archive selected"),
+				helpAction(actionJunk, "junk selected"),
+				helpAction(actionMove, "move selected"),
+				helpAction(actionToggleFlag, "flag selected"),
+				helpAction(actionToggleRead, "read/unread selected"),
+				helpAction(actionBack, "cancel range"),
+			},
+		},
+		{
 			title: "reader",
 			rows: []helpRow{
 				helpPair(actionUp, actionDown, "scroll"),
@@ -122,6 +136,8 @@ func helpGroups() []helpGroup {
 				helpAction(actionOpen, "confirm"),
 				helpAction(actionBack, "cancel"),
 				helpAction(actionQuit, "close"),
+				helpLiteral("a-z", "filter folders"),
+				helpLiteral("backspace", "erase a letter"),
 			},
 		},
 	}
