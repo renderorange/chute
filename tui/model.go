@@ -89,6 +89,8 @@ type Model struct {
 	moveOpen    bool
 	moveCursor  int
 	moveFolders []mail.Folder
+	moveFilter  string
+	moveMatches []mail.Folder
 
 	accountsOpen  bool
 	accountCursor int
@@ -669,6 +671,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveOpen = false
 		m.moveFolders = nil
 		m.moveCursor = 0
+		m.moveFilter = ""
+		m.moveMatches = nil
 
 		m.attachOpen = false
 		m.attachCursor = 0

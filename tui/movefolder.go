@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
 	"github.com/renderorange/chute/mail"
+	"github.com/sahilm/fuzzy"
 )
 
 // folderMoveMsg reports a named move to an arbitrary mailbox.
@@ -52,28 +53,86 @@ func (m Model) beginMove() (tea.Model, tea.Cmd) {
 	m.moveOpen = true
 	m.moveCursor = 0
 	m.moveFolders = folders
+	m.moveFilter = ""
+	m.moveMatches = folders
 	m.status = ""
 
 	return m, nil
 }
 
-// handleMoveKey applies a keypress while the move picker is open.
+// matchFolders narrows the destination list to the folders matching query, in
+// folder order. The match is fuzzy and case-insensitive, the same rules the list
+// filter uses (#95), so "pr" finds "Projects" and "ach" finds "Archive".
+func matchFolders(folders []mail.Folder, query string) []mail.Folder {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return folders
+	}
+
+	names := make([]string, len(folders))
+	for i, folder := range folders {
+		names[i] = folder.Name
+	}
+
+	matched := make([]mail.Folder, 0, len(folders))
+	for _, hit := range fuzzy.FindNoSort(query, names) {
+		matched = append(matched, folders[hit.Index])
+	}
+
+	return matched
+}
+
+// applyMoveFilter re-derives the visible destinations after the query changed and
+// puts the cursor back at the top, because the row it pointed at may be gone.
+func (m *Model) applyMoveFilter() {
+	m.moveMatches = matchFolders(m.moveFolders, m.moveFilter)
+	m.moveCursor = 0
+	m.status = ""
+}
+
+// closeMove dismisses the picker and forgets the query, so reopening it starts
+// from the whole list.
+func (m *Model) closeMove() {
+	m.moveOpen = false
+	m.moveFilter = ""
+	m.moveMatches = nil
+}
+
+// handleMoveKey applies a keypress while the move picker is open. Printable keys
+// belong to the filter query, as they do in the filter prompt, so a folder name
+// can be typed; esc, enter, backspace and the arrows are the control keys.
+// Rebound modal keys do not apply here, which is the same trade the filter and
+// search prompts make.
 func (m Model) handleMoveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch m.keys.resolve(msg.String()) {
-	case actionForceQuit:
+	switch msg.Type {
+	case tea.KeyCtrlC:
 		return m, tea.Quit
 
-	case actionQuit, actionBack, actionMove:
-		m.moveOpen = false
+	case tea.KeyEsc:
+		m.closeMove()
 
-	case actionUp:
+	case tea.KeyEnter:
+		return m.moveSelectionToFolder()
+
+	case tea.KeyUp:
 		m.moveCursor = max(0, m.moveCursor-1)
 
-	case actionDown:
-		m.moveCursor = min(m.moveCursor+1, len(m.moveFolders)-1)
+	case tea.KeyDown:
+		m.moveCursor = max(0, min(m.moveCursor+1, len(m.moveMatches)-1))
 
-	case actionOpen:
-		return m.moveSelectionToFolder()
+	case tea.KeyBackspace:
+		if runes := []rune(m.moveFilter); len(runes) > 0 {
+			m.moveFilter = string(runes[:len(runes)-1])
+			m.applyMoveFilter()
+		}
+
+	case tea.KeySpace:
+		m.moveFilter += " "
+		m.applyMoveFilter()
+
+	case tea.KeyRunes:
+		m.moveFilter += string(msg.Runes)
+		m.applyMoveFilter()
 	}
 
 	return m, nil
@@ -81,16 +140,22 @@ func (m Model) handleMoveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // moveSelectionToFolder starts the move to the mailbox under the picker cursor.
 func (m Model) moveSelectionToFolder() (tea.Model, tea.Cmd) {
-	if !m.moveOpen || len(m.moveFolders) == 0 {
+	if !m.moveOpen {
 		return m, nil
 	}
-	if m.moveCursor < 0 || m.moveCursor >= len(m.moveFolders) {
-		m.moveOpen = false
+	if len(m.moveMatches) == 0 {
+		m.status = "no folders match"
+
+		return m, nil
+	}
+	if m.moveCursor < 0 || m.moveCursor >= len(m.moveMatches) {
+		m.closeMove()
+
 		return m, nil
 	}
 
-	dest := m.moveFolders[m.moveCursor].Name
-	m.moveOpen = false
+	dest := m.moveMatches[m.moveCursor].Name
+	m.closeMove()
 
 	uids := m.actionUIDs()
 	if len(uids) == 0 {
@@ -144,20 +209,31 @@ func (m Model) afterRemoval(uids []imap.UID, status string) (tea.Model, tea.Cmd)
 	return next, cmd
 }
 
-// renderMoveModal centres the folder picker in the content area.
+// renderMoveModal centres the folder picker in the content area. The query line
+// appears only once something is typed, so the default dialog keeps its rows.
 func (m Model) renderMoveModal(width, height int) string {
-	if len(m.moveFolders) == 0 {
-		return ""
-	}
+	inner := max(10, width-14)
 
-	rows := max(1, min(len(m.moveFolders), height-6))
-	start := clamp(m.moveCursor-rows/2, 0, max(0, len(m.moveFolders)-rows))
-	end := min(start+rows, len(m.moveFolders))
-
+	chrome := 6
 	lines := []string{TitleStyle.Render("move to folder")}
-	for i := start; i < end; i++ {
-		lines = append(lines, folderRow(m.moveFolders[i], i == m.moveCursor, max(10, width-14)))
+	if m.moveFilter != "" {
+		chrome++
+		lines = append(lines, NormalStyle.Render(TruncateDisplay(m.moveFilter+"_", inner)))
 	}
+
+	switch {
+	case len(m.moveMatches) == 0:
+		lines = append(lines, MutedStyle.Render("no folders match"))
+	default:
+		rows := max(1, min(len(m.moveMatches), height-chrome))
+		start := clamp(m.moveCursor-rows/2, 0, max(0, len(m.moveMatches)-rows))
+		end := min(start+rows, len(m.moveMatches))
+
+		for i := start; i < end; i++ {
+			lines = append(lines, folderRow(m.moveMatches[i], i == m.moveCursor, inner))
+		}
+	}
+
 	lines = append(lines, "", MutedStyle.Render("enter:move  esc:close"))
 
 	modal := ModalStyle.Render(strings.Join(lines, "\n"))

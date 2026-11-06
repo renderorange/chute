@@ -89,8 +89,8 @@ func TestMovePickerMovesToTheChosenFolder(t *testing.T) {
 	}
 
 	m = press(t, m, keyMsg("m"))
-	m = press(t, m, keyMsg("down")) // Archive -> Projects
-	m = press(t, m, keyMsg("enter"))
+	m = press(t, m, namedKey("down")) // Archive -> Projects
+	m = press(t, m, namedKey("enter"))
 
 	if move.calls != 1 {
 		t.Fatalf("loader calls = %d, want 1", move.calls)
@@ -117,7 +117,7 @@ func TestMovePickerEscClosesWithoutMoving(t *testing.T) {
 	m, move := withFolderMove(t, 3)
 
 	m = press(t, m, keyMsg("m"))
-	m = press(t, m, keyMsg("esc"))
+	m = press(t, m, namedKey("esc"))
 
 	if m.moveOpen {
 		t.Error("esc left the picker open")
