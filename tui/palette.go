@@ -79,11 +79,6 @@ var (
 	NormalStyle = lipgloss.NewStyle().
 			Foreground(ColorTextNormal)
 
-	// UnreadStyle marks unread messages: the normal colour, in bold.
-	UnreadStyle = lipgloss.NewStyle().
-			Foreground(ColorTextNormal).
-			Bold(true)
-
 	// ErrorStyle is for failures.
 	ErrorStyle = lipgloss.NewStyle().
 			Foreground(ColorTextError)
