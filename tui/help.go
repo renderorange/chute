@@ -136,7 +136,7 @@ func helpGroups() []helpGroup {
 				helpAction(actionOpen, "confirm"),
 				helpAction(actionBack, "cancel"),
 				helpAction(actionQuit, "close"),
-				helpLiteral("a-z", "filter folders"),
+				helpLiteral("text", "filter folders"),
 				helpLiteral("backspace", "erase a letter"),
 			},
 		},

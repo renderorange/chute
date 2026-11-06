@@ -109,20 +109,58 @@ func TestMovePickerBackspaceWidensTheList(t *testing.T) {
 	}
 }
 
-// TestMovePickerLettersTypeInsteadOfClosing records the deliberate change: every
-// printable key belongs to the query, so q filters rather than closing. esc is
-// still the way out.
-func TestMovePickerLettersTypeInsteadOfClosing(t *testing.T) {
+// TestMovePickerKeepsItsKeysBound proves the picker did not take the quit key
+// hostage: with the shipped keymap q still closes it and does not type.
+func TestMovePickerKeepsItsKeysBound(t *testing.T) {
 	m, _ := withFolderMove(t, 3)
 
 	m = press(t, m, keyMsg("m"))
 	m = press(t, m, keyMsg("q"))
 
-	if !m.moveOpen {
-		t.Fatal("q closed the picker instead of typing into the query")
+	if m.moveOpen {
+		t.Fatal("q did not close the picker")
 	}
-	if m.moveFilter != "q" {
-		t.Errorf("query = %q, want q", m.moveFilter)
+	if m.moveFilter != "" {
+		t.Errorf("query = %q, want empty", m.moveFilter)
+	}
+}
+
+// TestMovePickerHonoursAReboundKey is the reason the handler resolves the
+// keymap first: a rebound open key still moves, and the letters around it type.
+func TestMovePickerHonoursAReboundKey(t *testing.T) {
+	cfg := testConfig()
+	cfg.Keys = map[string][]string{"open": {"o"}}
+
+	m := loadedWith(t, cfg, moveFolders())
+	m.loadMessages = fakeMessages(sampleMessages(3), nil)
+	m = openInboxAnyMode(t, m)
+
+	move := &fakeFolderMove{}
+	m.moveToFolder = move.load
+
+	m = press(t, m, keyMsg("m"))
+	m = press(t, m, keyMsg("p"))
+	m = press(t, m, keyMsg("r"))
+	m = press(t, m, keyMsg("o"))
+
+	if move.calls != 1 || move.dest != "Projects" {
+		t.Errorf("moved %d times to %q, want once to Projects from the rebound o", move.calls, move.dest)
+	}
+}
+
+// TestMovePickerTypesLettersBoundElsewhere covers the other half: a letter bound
+// to an action this picker does not honour is text, not a command.
+func TestMovePickerTypesLettersBoundElsewhere(t *testing.T) {
+	m, _ := withFolderMove(t, 3)
+
+	m = press(t, m, keyMsg("m"))
+	m = press(t, m, keyMsg("d"))
+
+	if !m.moveOpen {
+		t.Fatal("d closed the picker instead of typing")
+	}
+	if m.moveFilter != "d" {
+		t.Errorf("query = %q, want d", m.moveFilter)
 	}
 
 	m = press(t, m, namedKey("esc"))

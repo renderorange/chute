@@ -98,28 +98,33 @@ func (m *Model) closeMove() {
 	m.moveMatches = nil
 }
 
-// handleMoveKey applies a keypress while the move picker is open. Printable keys
-// belong to the filter query, as they do in the filter prompt, so a folder name
-// can be typed; esc, enter, backspace and the arrows are the control keys.
-// Rebound modal keys do not apply here, which is the same trade the filter and
-// search prompts make.
+// handleMoveKey applies a keypress while the move picker is open. A key bound to
+// an action this picker honours still does that action, so a rebound esc/enter/
+// m/quit works here like everywhere else. Every other printable key belongs to
+// the filter query, which is why typing a folder name is possible at all; the
+// alternative — only unbound letters type — would make filtering useless when
+// almost every letter carries a binding.
 func (m Model) handleMoveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC:
+	switch m.keys.resolve(msg.String()) {
+	case actionForceQuit:
 		return m, tea.Quit
 
-	case tea.KeyEsc:
+	case actionQuit, actionBack, actionMove:
 		m.closeMove()
 
-	case tea.KeyEnter:
+		return m, nil
+
+	case actionOpen:
 		return m.moveSelectionToFolder()
 
-	case tea.KeyUp:
+	case actionUp:
 		m.moveCursor = max(0, m.moveCursor-1)
 
-	case tea.KeyDown:
+	case actionDown:
 		m.moveCursor = max(0, min(m.moveCursor+1, len(m.moveMatches)-1))
+	}
 
+	switch msg.Type {
 	case tea.KeyBackspace:
 		if runes := []rune(m.moveFilter); len(runes) > 0 {
 			m.moveFilter = string(runes[:len(runes)-1])
