@@ -53,6 +53,11 @@ type Model struct {
 	folderCursor int
 	folderScroll int
 
+	// folderExpanded is the folder tree's open set, keyed by mailbox name. A name that
+	// is absent is collapsed; the set is seeded from the state file and written back on
+	// every explicit expand or collapse.
+	folderExpanded map[string]bool
+
 	openFolder    string
 	messages      []mail.Message
 	rows          []Row
@@ -191,6 +196,7 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		bodies:           make(map[bodyKey]*mail.Body),
 		markSeenOnLoad:   make(map[bodyKey]bool),
 		collapsed:        make(map[imap.UID]bool),
+		folderExpanded:   make(map[string]bool),
 		lastSeen:         make(map[folderKey]imap.UID),
 		visualAnchor:     noVisualAnchor,
 		keys:             bindingsFromConfig(cfg.KeyBindings()),
@@ -326,10 +332,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = stateConnected
 		m.status = ""
 		m.folders = msg.folders
+		m.folderExpanded = expandedFolders(m.selection, msg.account)
 		m.folderCursor = 0
 		m.folderScroll = 0
 		m.foldersOpen = false
 		m.folderOverlayCursor = 0
+
+		// The folder being read keeps its path open after a reload; a listing that no
+		// longer has it simply expands nothing.
+		if m.openFolder != "" {
+			m.expandTo(m.openFolder)
+		}
 		m.clampFolderScroll()
 
 		if !m.started {
@@ -627,6 +640,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionCollapse:
 		return m.toggleCollapse()
 
+	case actionExpandFolder:
+		if m.focus == focusFolders {
+			m.expandFolderAtCursor()
+		}
+
+		return m, nil
+
+	case actionCollapseFolder:
+		if m.focus == focusFolders {
+			m.collapseFolderAtCursor()
+		}
+
+		return m, nil
+
 	case actionSearch:
 		return m.beginSearch()
 
@@ -683,6 +710,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionOpen:
 		if m.focus == focusFolders {
+			// Enter reveals a collapsed folder before it opens anything: the first press
+			// expands, the next behaves as it always has and loads the folder.
+			if m.expandFolderAtCursor() {
+				return m, nil
+			}
+
 			return m.openSelectedFolder()
 		}
 		if m.focus == focusMessages {
@@ -770,9 +803,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // jumpToEnd moves the active panel's cursor to its last row.
 func (m *Model) jumpToEnd() {
-	if m.focus == focusFolders && len(m.folders) > 0 {
-		m.folderCursor = len(m.folders) - 1
-		m.clampFolderScroll()
+	if m.focus == focusFolders {
+		if rows := m.folderTree(); len(rows) > 0 {
+			m.folderCursor = len(rows) - 1
+			m.clampFolderScroll()
+		}
 	}
 	if m.focus == focusMessages && len(m.rows) > 0 {
 		m.messageCursor = len(m.rows) - 1
@@ -803,6 +838,7 @@ func (m Model) openSelectedFolder() (tea.Model, tea.Cmd) {
 // user made, and must not create a state file for someone who switches nothing.
 func (m Model) openFolderByName(name string, remember bool) (tea.Model, tea.Cmd) {
 	m.openFolder = name
+	m.expandTo(name)
 	m.filter = ""
 	m.messages = nil
 	m.rows = nil
@@ -1065,15 +1101,22 @@ func (m Model) renderPanels(layout Layout) string {
 
 	switch layout.Mode {
 	case ModeThree:
+		gap := blankBlock(PanelGap, layout.Folders.Height)
+
 		return JoinHorizontal(
 			m.renderPanel("folders", layout.Folders, folderBody, m.focus == focusFolders),
+			gap,
 			m.renderPanel("messages", layout.Messages, messageBody, m.focus == focusMessages),
+			gap,
 			m.renderPanel("reader", layout.Reader, readerBody, m.focus == focusReader),
 		)
 
 	case ModeTwo:
+		gap := blankBlock(PanelGap, layout.Messages.Height)
+
 		return JoinHorizontal(
 			m.renderPanel("messages", layout.Messages, messageBody, m.focus == focusMessages),
+			gap,
 			m.renderPanel("reader", layout.Reader, readerBody, m.focus == focusReader),
 		)
 	}

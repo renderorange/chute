@@ -18,7 +18,7 @@ type footerCase struct {
 // the budget fails here instead of being silently dropped. The owner asked for
 // this set to shrink to the mistake-preventing keys (#26): the footer is a
 // reminder, not the keymap, and the rest waits for the help screen.
-const footerDefaultHints = "d:delete f:flag m:move enter:open q:quit"
+const footerDefaultHints = "d:delete  f:flag  m:move  enter:open  q:quit"
 
 // footerCases builds one model per footer context. Every model is 105 columns
 // unless the case is about the composer, whose hints are wider.
@@ -176,15 +176,15 @@ func TestFooterAt60KeepsWholeHints(t *testing.T) {
 }
 
 // TestFooterDropsWholeHintsWhenItMust keeps the packing rule covered. The default
-// set fits from 60 columns up, so the drop path is exercised just below it: at 40
-// columns the quit hint no longer fits and is dropped whole, never cut.
+// set fits from 60 columns up (44 cells in 54), so the drop path is exercised just
+// below it: at 44 columns the quit hint no longer fits and is dropped whole, never cut.
 func TestFooterDropsWholeHintsWhenItMust(t *testing.T) {
-	m := sized(40, 20)
+	m := sized(44, 20)
 	footer := m.renderFooter()
 
-	const want = "d:delete f:flag m:move enter:open"
+	const want = "d:delete  f:flag  m:move  enter:open"
 	if footer != want {
-		t.Errorf("footer at 40 = %q, want %q", footer, want)
+		t.Errorf("footer at 44 = %q, want %q", footer, want)
 	}
 	if !strings.HasPrefix(footerDefaultHints, footer) {
 		t.Errorf("footer at 40 is not a whole-hint prefix of the full set: %q", footer)
@@ -211,7 +211,7 @@ func TestFooterWideStaysCalm(t *testing.T) {
 // whole hints, not substrings, because "ctrl+r:reload" contains "r:reload".
 func TestFooterNeverSaysRReload(t *testing.T) {
 	for _, width := range []int{60, 80, 95, 105, 115, 130, 140, 200} {
-		for _, hint := range strings.Split(sized(width, 40).renderFooter(), " ") {
+		for _, hint := range strings.Split(sized(width, 40).renderFooter(), hintSeparator) {
 			if hint == "r:reload" {
 				t.Errorf("width %d: the footer claims r:reload", width)
 			}

@@ -6,11 +6,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// hintSeparator sits between two hints. It is one cell, not two: at 105 columns
-// the content width is 99, and the priority set plus back plus the compose keys
-// costs 99 with single spaces and 109 with double ones. A second space would
-// push a hint off the footer, which is the defect this file exists to fix.
-const hintSeparator = " "
+// hintSeparator sits between two hints. Two cells matches imap-notes, whose footer
+// joins its command keys with two spaces (`tui/view.go:135`). The earlier one-cell
+// separator was a width compromise from when the footer carried ten hints; the set
+// has since shrunk to the five mistake-preventing keys (#26), which cost 44 cells
+// with this separator and fit the 54-cell floor at 60 columns.
+const hintSeparator = "  "
 
 // footerHint is one "key:label" reminder. A hint is either derived from the
 // binding table (actions) or literal, for the composer, whose keys are read

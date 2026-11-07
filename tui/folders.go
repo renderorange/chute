@@ -25,40 +25,45 @@ func (m Model) folderRows() int {
 	return rows
 }
 
-// moveFolderCursor moves the selection and keeps it inside the scroll window.
+// moveFolderCursor moves the selection and keeps it inside the scroll window. The
+// cursor indexes the visible tree, not the listing: a hidden subfolder cannot be
+// selected, and a collapsed parent keeps the cursor where the user left it.
 func (m *Model) moveFolderCursor(delta int) {
-	if len(m.folders) == 0 {
+	rows := m.folderTree()
+	if len(rows) == 0 {
 		return
 	}
 
-	m.folderCursor = clamp(m.folderCursor+delta, 0, len(m.folders)-1)
+	m.folderCursor = clamp(m.folderCursor+delta, 0, len(rows)-1)
 
-	rows := m.folderRows()
+	visible := m.folderRows()
 	if m.folderCursor < m.folderScroll {
 		m.folderScroll = m.folderCursor
 	}
-	if m.folderCursor >= m.folderScroll+rows {
-		m.folderScroll = m.folderCursor - rows + 1
+	if m.folderCursor >= m.folderScroll+visible {
+		m.folderScroll = m.folderCursor - visible + 1
 	}
 }
 
-// clampFolderScroll keeps the stored scroll offset valid after a reload or resize.
+// clampFolderScroll keeps the stored scroll offset valid after a reload, a resize or a
+// fold that changed how many rows are drawn.
 func (m *Model) clampFolderScroll() {
-	rows := m.folderRows()
-	maxScroll := max(0, len(m.folders)-rows)
+	rows := len(m.folderTree())
+	visible := m.folderRows()
+	maxScroll := max(0, rows-visible)
 
 	m.folderScroll = clamp(m.folderScroll, 0, maxScroll)
-	m.folderCursor = clamp(m.folderCursor, 0, max(0, len(m.folders)-1))
+	m.folderCursor = clamp(m.folderCursor, 0, max(0, rows-1))
 
 	if m.folderCursor < m.folderScroll {
 		m.folderScroll = m.folderCursor
 	}
-	if m.folderCursor >= m.folderScroll+rows {
-		m.folderScroll = m.folderCursor - rows + 1
+	if m.folderCursor >= m.folderScroll+visible {
+		m.folderScroll = m.folderCursor - visible + 1
 	}
 }
 
-// folderLines renders the visible slice of the folder list.
+// folderLines renders the visible slice of the folder tree.
 func (m Model) folderLines(rows, width int) []string {
 	if rows < 1 {
 		return nil
@@ -77,24 +82,50 @@ func (m Model) folderLines(rows, width int) []string {
 		return []string{MutedStyle.Render("no folders")}
 	}
 
-	start := clamp(m.folderScroll, 0, max(0, len(m.folders)-rows))
-	end := min(start+rows, len(m.folders))
+	tree := m.folderTree()
+	start := clamp(m.folderScroll, 0, max(0, len(tree)-rows))
+	end := min(start+rows, len(tree))
 
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		lines = append(lines, m.folderLine(i, width))
+		lines = append(lines, m.folderTreeLine(tree[i], i == m.folderCursor, width))
 	}
 
 	return lines
 }
 
-// folderLine renders one folder, indented by depth and marked when selected.
-func (m Model) folderLine(index, width int) string {
-	return folderRow(m.folders[index], index == m.folderCursor, width)
+// folderTreeLine renders one row of the folder tree in the shape imap-notes uses: the
+// +/- marker leads the row and the cursor is the bold row, with no separate glyph, so
+// the marker is never displaced by the selection. A folder with no subfolders shows a
+// blank marker rather than a sign that promises nothing.
+func (m Model) folderTreeLine(row folderTreeRow, selected bool, width int) string {
+	folder := m.folders[row.index]
+
+	marker := "  "
+	if row.hasChildren {
+		if row.expanded {
+			marker = "- "
+		} else {
+			marker = "+ "
+		}
+	}
+
+	label := strings.Repeat("  ", row.depth) + folder.Leaf()
+	label = Truncate(label, max(1, width-2))
+	line := marker + label
+
+	switch {
+	case selected:
+		return SelectedStyle.Render(line)
+	case !folder.Selectable():
+		return MutedStyle.Render(line)
+	}
+
+	return NormalStyle.Render(line)
 }
 
-// folderRow renders one folder row: indent, leaf, marker and styling. The label
-// is truncated so a long name never wraps onto a second line.
+// folderRow renders one folder row for a flat list: the folders overlay and the move
+// picker show every mailbox, including the ones the tree currently hides.
 func folderRow(folder mail.Folder, selected bool, width int) string {
 	label := strings.Repeat("  ", folder.Depth()) + folder.Leaf()
 	label = Truncate(label, max(1, width-2))
@@ -111,21 +142,22 @@ func folderRow(folder mail.Folder, selected bool, width int) string {
 
 // selectedFolder is the folder under the cursor, if there is one.
 func (m Model) selectedFolder() (mail.Folder, bool) {
-	if m.folderCursor < 0 || m.folderCursor >= len(m.folders) {
+	row, ok := m.selectedTreeRow()
+	if !ok {
 		return mail.Folder{}, false
 	}
 
-	return m.folders[m.folderCursor], true
+	return m.folders[row.index], true
 }
 
-// moveFolderCursorTo puts the folder cursor on folder, if the listing still has it.
+// moveFolderCursorTo puts the folder cursor on folder and reveals its path, if the
+// listing still has it.
 func (m *Model) moveFolderCursorTo(folder mail.Folder) {
-	for i := range m.folders {
-		if m.folders[i].Name == folder.Name {
-			m.folderCursor = i
+	m.expandTo(folder.Name)
 
-			return
-		}
+	if index := m.treeRowIndex(folder.Name); index >= 0 {
+		m.folderCursor = index
+		m.clampFolderScroll()
 	}
 }
 

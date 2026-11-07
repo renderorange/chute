@@ -129,11 +129,13 @@ only one action, an action needs at least one key, and an unknown name is a load
 
 ## State
 
-chute remembers the last account and the folder each account had open, in
+chute remembers the last account, the folder each account had open, and which folders
+each account had expanded in the folder tree, in
 `$XDG_STATE_HOME/chute/state.toml` or `~/.local/state/chute/state.toml` when
 `XDG_STATE_HOME` is unset. It holds names only — no credentials, no addresses, no message
 data — is written `0600`, and deleting it is safe: the config remains the authority and a
-name that no longer exists is ignored.
+name that no longer exists is ignored. A folder absent from the expanded set is folded,
+so a new state file opens the tree showing only its top level.
 
 ## Flags
 
@@ -179,7 +181,7 @@ Composer keys are fixed, not part of `[keys]`:
 | `down` | `down` | Move down one message. |
 | `top` | `home`, `g` | First message. |
 | `bottom` | `end`, `G` | Last message. |
-| `open` | `enter` | Open the message, or load the folder under the cursor. |
+| `open` | `enter` | Open the message, or load the folder under the cursor. In the folder pane, a collapsed folder expands first (`right` expands without opening); the next `enter` loads it. |
 | `filter` | `/` | Fuzzy, case-insensitive filter over the loaded list's sender, subject and recipients. |
 | `search` | `S` | Server-side search of the open folder; free text plus `from:`, `subject:`, `text:`, `body:` and `since:YYYY-MM-DD`. `esc` returns to the folder. |
 | `visual_range` | `v` | Anchor a selection range for the actions below. |
@@ -189,6 +191,8 @@ Composer keys are fixed, not part of `[keys]`:
 | `move` | `m` | Move to a mailbox chosen from a picker; type to filter the folder list. |
 | `empty_trash` | `X` | Delete everything in Trash, after a confirmation. Only works inside Trash. |
 | `collapse` | `z` | Fold or unfold the conversation under the cursor. |
+| `expand_folder` | `right` | In the folder pane, expand the folder under the cursor. |
+| `collapse_folder` | `left` | In the folder pane, fold the folder under the cursor. |
 | `toggle_flag` | `f` | Flag or unflag. |
 | `toggle_read` | `u` | Mark read or unread. |
 | `attachments` | `s` | List attachments and save them to `download_dir`. |

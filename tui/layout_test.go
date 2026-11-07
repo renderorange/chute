@@ -10,8 +10,8 @@ func TestComputeLayoutThreeColumns(t *testing.T) {
 	}
 
 	available := ContentWidth(140)
-	if got := layout.Folders.Width + layout.Messages.Width + layout.Reader.Width; got != available {
-		t.Errorf("column widths sum to %d, want %d", got, available)
+	if got := layout.Folders.Width + layout.Messages.Width + layout.Reader.Width + 2*PanelGap; got != available {
+		t.Errorf("column widths plus gaps sum to %d, want %d", got, available)
 	}
 	if layout.Folders.Width < MinFoldersWidth || layout.Folders.Width > MaxFoldersWidth {
 		t.Errorf("folders width = %d, want %d..%d", layout.Folders.Width, MinFoldersWidth, MaxFoldersWidth)
@@ -22,10 +22,11 @@ func TestComputeLayoutThreeColumns(t *testing.T) {
 	if layout.Reader.Width < MinReaderWidth {
 		t.Errorf("reader width = %d, want at least %d", layout.Reader.Width, MinReaderWidth)
 	}
-	if layout.Folders.X != 0 || layout.Messages.X != layout.Folders.Width {
-		t.Errorf("x offsets = %d, %d; want 0, %d", layout.Folders.X, layout.Messages.X, layout.Folders.Width)
+	if layout.Folders.X != 0 || layout.Messages.X != layout.Folders.Width+PanelGap {
+		t.Errorf("x offsets = %d, %d; want 0, %d",
+			layout.Folders.X, layout.Messages.X, layout.Folders.Width+PanelGap)
 	}
-	if got, want := layout.Reader.X, layout.Messages.X+layout.Messages.Width; got != want {
+	if got, want := layout.Reader.X, layout.Messages.X+layout.Messages.Width+PanelGap; got != want {
 		t.Errorf("reader x = %d, want %d", got, want)
 	}
 }
@@ -39,8 +40,8 @@ func TestComputeLayoutThreeColumnsAtBreakpoint(t *testing.T) {
 	if layout.Reader.Width < MinReaderWidth {
 		t.Errorf("reader width = %d at the breakpoint, want at least %d", layout.Reader.Width, MinReaderWidth)
 	}
-	if got, want := layout.Folders.Width+layout.Messages.Width+layout.Reader.Width, ContentWidth(ThreeColumnBreakpoint); got != want {
-		t.Errorf("column widths sum to %d, want %d", got, want)
+	if got, want := layout.Folders.Width+layout.Messages.Width+layout.Reader.Width+2*PanelGap, ContentWidth(ThreeColumnBreakpoint); got != want {
+		t.Errorf("column widths plus gaps sum to %d, want %d", got, want)
 	}
 }
 
@@ -63,8 +64,8 @@ func TestComputeLayoutTwoColumns(t *testing.T) {
 		if !layout.Folders.Empty() {
 			t.Errorf("width %d: folders box should be empty, got %+v", width, layout.Folders)
 		}
-		if got, want := layout.Messages.Width+layout.Reader.Width, ContentWidth(width); got != want {
-			t.Errorf("width %d: columns sum to %d, want %d", width, got, want)
+		if got, want := layout.Messages.Width+layout.Reader.Width+PanelGap, ContentWidth(width); got != want {
+			t.Errorf("width %d: columns plus gap sum to %d, want %d", width, got, want)
 		}
 		if layout.Messages.Width < MinMessagesWidth {
 			t.Errorf("width %d: messages width = %d, want at least %d", width, layout.Messages.Width, MinMessagesWidth)
@@ -136,18 +137,19 @@ func TestComputeLayoutHeightsMatch(t *testing.T) {
 	}
 }
 
-// assertColumnsSum checks the invariant every layout must hold: the visible columns add up
-// to the content width, so no pane can overlap another or leave a gap.
+// assertColumnsSum checks the invariant every layout must hold: the visible columns and
+// the PanelGap columns between them add up to the content width, so no pane can overlap
+// another or leave the frame short.
 func assertColumnsSum(t *testing.T, layout Layout, width int) {
 	t.Helper()
 
-	sum := layout.Folders.Width + layout.Messages.Width + layout.Reader.Width
+	sum := layout.Folders.Width + layout.Messages.Width + layout.Reader.Width + 2*PanelGap
 	if layout.Mode == ModeTwo {
-		sum = layout.Messages.Width + layout.Reader.Width
+		sum = layout.Messages.Width + layout.Reader.Width + PanelGap
 	}
 
 	if want := ContentWidth(width); sum != want {
-		t.Errorf("width %d: columns sum to %d, want %d (%+v)", width, sum, want, layout)
+		t.Errorf("width %d: columns and gaps sum to %d, want %d (%+v)", width, sum, want, layout)
 	}
 }
 
@@ -165,7 +167,7 @@ func TestComputeLayoutWithColumnWidths(t *testing.T) {
 	if got := layout.Messages.Width; got != 70 {
 		t.Errorf("messages width = %d, want 70", got)
 	}
-	if got, want := layout.Reader.Width, ContentWidth(200)-100; got != want {
+	if got, want := layout.Reader.Width, ContentWidth(200)-100-2*PanelGap; got != want {
 		t.Errorf("reader width = %d, want %d", got, want)
 	}
 	assertColumnsSum(t, layout, 200)
@@ -210,7 +212,7 @@ func TestColumnWidthBeatsPercent(t *testing.T) {
 func TestReaderMinimumTrimsTheList(t *testing.T) {
 	layout := ComputeLayoutWith(120, 40, Widths{MessagesWidth: 150})
 
-	want := ContentWidth(120) - layout.Folders.Width - MinReaderWidth
+	want := ContentWidth(120) - layout.Folders.Width - 2*PanelGap - MinReaderWidth
 	if got := layout.Messages.Width; got != want {
 		t.Errorf("messages width = %d, want %d to leave the reader its minimum", got, want)
 	}
@@ -229,7 +231,7 @@ func TestReaderMinimumTrimsTheFoldersLast(t *testing.T) {
 		t.Errorf("messages width = %d, want the floor %d", got, MinMessagesWidth)
 	}
 
-	want := ContentWidth(120) - MinMessagesWidth - MinReaderWidth
+	want := ContentWidth(120) - MinMessagesWidth - 2*PanelGap - MinReaderWidth
 	if got := layout.Folders.Width; got != want {
 		t.Errorf("folders width = %d, want %d, the remainder once the reader has its minimum", got, want)
 	}
@@ -271,8 +273,8 @@ func TestAutomaticMessagesWidthGrowsWithTheTerminal(t *testing.T) {
 	if got := atBreakpoint.Folders.Width; got != 28 {
 		t.Errorf("folders width at %d columns = %d, want the automatic 28", ThreeColumnBreakpoint, got)
 	}
-	if got := atBreakpoint.Reader.Width; got != 46 {
-		t.Errorf("reader width at %d columns = %d, want 46", ThreeColumnBreakpoint, got)
+	if got := atBreakpoint.Reader.Width; got != 46-2*PanelGap {
+		t.Errorf("reader width at %d columns = %d, want %d", ThreeColumnBreakpoint, got, 46-2*PanelGap)
 	}
 }
 
@@ -287,7 +289,7 @@ func TestTwoPaneHonoursMessagesWidth(t *testing.T) {
 	if got := layout.Messages.Width; got != 50 {
 		t.Errorf("messages width = %d, want 50", got)
 	}
-	if got, want := layout.Reader.Width, ContentWidth(115)-50; got != want {
+	if got, want := layout.Reader.Width, ContentWidth(115)-50-PanelGap; got != want {
 		t.Errorf("reader width = %d, want %d", got, want)
 	}
 	assertColumnsSum(t, layout, 115)

@@ -70,8 +70,9 @@ func TestSaveStateRoundTrips(t *testing.T) {
 	dir := withStateDir(t)
 
 	want := State{
-		Account: "work",
-		Folders: map[string]string{"work": "Archive", "fastmail": "INBOX"},
+		Account:  "work",
+		Folders:  map[string]string{"work": "Archive", "fastmail": "INBOX"},
+		Expanded: map[string][]string{"work": {"Work", "Work/2024"}},
 	}
 	if err := SaveState(want); err != nil {
 		t.Fatalf("SaveState: %v", err)
@@ -92,7 +93,11 @@ func TestSaveStateRoundTrips(t *testing.T) {
 	}
 
 	// A second write replaces the file without changing its mode.
-	next := State{Account: "fastmail", Folders: map[string]string{"fastmail": "Sent"}}
+	next := State{
+		Account:  "fastmail",
+		Folders:  map[string]string{"fastmail": "Sent"},
+		Expanded: map[string][]string{"fastmail": {"Archive"}},
+	}
 	if err := SaveState(next); err != nil {
 		t.Fatalf("second SaveState: %v", err)
 	}
@@ -108,11 +113,17 @@ func TestSaveStateRoundTrips(t *testing.T) {
 }
 
 // TestStateFileHoldsOnlyNames is the issue's privacy criterion: account and folder
-// names, and nothing that could carry a credential or message content.
+// names, and nothing that could carry a credential or message content. The expanded
+// set is folder names too, so it belongs on the same side of that line.
 func TestStateFileHoldsOnlyNames(t *testing.T) {
 	dir := withStateDir(t)
 
-	if err := SaveState(State{Account: "work", Folders: map[string]string{"work": "Archive"}}); err != nil {
+	state := State{
+		Account:  "work",
+		Folders:  map[string]string{"work": "Archive"},
+		Expanded: map[string][]string{"work": {"Work", "Work/2024"}},
+	}
+	if err := SaveState(state); err != nil {
 		t.Fatalf("SaveState: %v", err)
 	}
 
@@ -126,8 +137,8 @@ func TestStateFileHoldsOnlyNames(t *testing.T) {
 		t.Fatalf("decoding state: %v", err)
 	}
 
-	if len(raw) != 2 {
-		t.Fatalf("top-level keys = %v, want exactly account and folders", raw)
+	if len(raw) != 3 {
+		t.Fatalf("top-level keys = %v, want exactly account, folders and expanded", raw)
 	}
 	if raw["account"] != "work" {
 		t.Errorf("account = %v, want work", raw["account"])
@@ -139,6 +150,14 @@ func TestStateFileHoldsOnlyNames(t *testing.T) {
 	}
 	if len(folders) != 1 || folders["work"] != "Archive" {
 		t.Errorf("folders = %v, want work = Archive", folders)
+	}
+
+	expanded, ok := raw["expanded"].(map[string]any)
+	if !ok {
+		t.Fatalf("expanded = %T, want a table", raw["expanded"])
+	}
+	if got, want := expanded["work"], []any{"Work", "Work/2024"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("expanded[work] = %v, want %v", got, want)
 	}
 
 	for _, forbidden := range []string{"password", "username", "imap", "smtp"} {

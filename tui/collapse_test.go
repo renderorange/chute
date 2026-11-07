@@ -136,7 +136,9 @@ func TestCollapseFitsTheFrame(t *testing.T) {
 	assertExactFrame(t, m, "collapsed thread")
 }
 
-// TestCollapseKeyOutsideTheListIsInert proves the triage guard applies.
+// TestCollapseKeyOutsideTheListIsInert proves the triage guard applies: z collapses
+// threads, so in the folder pane it does nothing. Folding a folder is left's job
+// (TestArrowKeysExpandAndFoldTheFolder), not the thread gesture's.
 func TestCollapseKeyOutsideTheListIsInert(t *testing.T) {
 	m := loaded(t, 140, 40, []mail.Folder{{Name: "INBOX", Delimiter: '/'}}, nil)
 	m.focus = focusFolders

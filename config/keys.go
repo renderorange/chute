@@ -47,6 +47,8 @@ const (
 	KeyMove              = "move"
 	KeyEmptyTrash        = "empty_trash"
 	KeyCollapse          = "collapse"
+	KeyExpandFolder      = "expand_folder"
+	KeyCollapseFolder    = "collapse_folder"
 	KeySearch            = "search"
 	KeySettings          = "settings"
 	KeyHelp              = "help"
@@ -87,6 +89,8 @@ var keyDefaults = map[string][]string{
 	KeyMove:              {"m"},
 	KeyEmptyTrash:        {"X"},
 	KeyCollapse:          {"z"},
+	KeyExpandFolder:      {"right"},
+	KeyCollapseFolder:    {"left"},
 	KeySearch:            {"S"},
 	KeySettings:          {","},
 	KeyHelp:              {"?"},
