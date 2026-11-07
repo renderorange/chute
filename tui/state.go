@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/renderorange/chute/config"
@@ -81,6 +82,48 @@ func (m *Model) rememberSelection() {
 	}
 	if m.openFolder != "" {
 		m.selection.Folders[m.accountName()] = m.openFolder
+	}
+
+	if m.saveState != nil {
+		_ = m.saveState(m.selection)
+	}
+}
+
+// expandedFolders is the set of open folders recorded for one account. A missing
+// account, or a state file written before the tree existed, means every folder is
+// collapsed, which is what a fresh install shows.
+func expandedFolders(state config.State, account string) map[string]bool {
+	names := state.Expanded[account]
+	set := make(map[string]bool, len(names))
+
+	for _, name := range names {
+		set[name] = true
+	}
+
+	return set
+}
+
+// rememberExpanded writes the tree's open folders for the active account and saves the
+// state. Only an explicit expand or collapse calls this: revealing a path at startup or
+// on open is not a change the user made. Sorted, because a map has no order and the
+// file is compared in tests.
+func (m *Model) rememberExpanded() {
+	if m.selection.Expanded == nil {
+		m.selection.Expanded = make(map[string][]string)
+	}
+
+	names := make([]string, 0, len(m.folderExpanded))
+	for name, expanded := range m.folderExpanded {
+		if expanded {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+
+	if len(names) == 0 {
+		delete(m.selection.Expanded, m.accountName())
+	} else {
+		m.selection.Expanded[m.accountName()] = names
 	}
 
 	if m.saveState != nil {

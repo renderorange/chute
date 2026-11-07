@@ -22,7 +22,7 @@ func (m Model) openFolders() (tea.Model, tea.Cmd) {
 	}
 
 	m.foldersOpen = true
-	m.folderOverlayCursor = m.folderCursor
+	m.folderOverlayCursor = m.folderIndex()
 	m.status = ""
 
 	return m, nil
@@ -44,8 +44,14 @@ func (m Model) handleFoldersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.folderOverlayCursor = min(m.folderOverlayCursor+1, len(m.folders)-1)
 
 	case actionOpen:
-		m.folderCursor = m.folderOverlayCursor
+		if m.folderOverlayCursor < 0 || m.folderOverlayCursor >= len(m.folders) {
+			return m, nil
+		}
+		// The overlay is a flat picker: it opens a mailbox, it does not fold the tree.
+		// Reveal the chosen folder's path first so the tree cursor can land on it.
+		m.moveFolderCursorTo(m.folders[m.folderOverlayCursor])
 		m.foldersOpen = false
+
 		return m.openSelectedFolder()
 	}
 

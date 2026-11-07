@@ -179,18 +179,22 @@ func TestResizeClampsFolderScroll(t *testing.T) {
 	}
 }
 
-func TestFolderLineIndentation(t *testing.T) {
+func TestFolderTreeIndentation(t *testing.T) {
 	m := loaded(t, 140, 40, []mail.Folder{
 		{Name: "Work", Delimiter: '/'},
 		{Name: "Work/Projects", Delimiter: '/'},
 	}, nil)
+	m.setFolderExpanded("Work", true)
 
-	nested := m.folderLine(1, 40)
-	if !strings.Contains(nested, "  Projects") {
-		t.Errorf("nested line = %q, want two spaces before the leaf", nested)
+	lines := m.folderLines(10, 40)
+	if len(lines) < 2 {
+		t.Fatalf("folder lines = %v, want Work and its child", lines)
 	}
-	if strings.Contains(nested, "Work/") {
-		t.Errorf("nested line = %q, want the leaf only", nested)
+	if !strings.Contains(lines[1], "  Projects") {
+		t.Errorf("nested line = %q, want two spaces before the leaf", lines[1])
+	}
+	if strings.Contains(lines[1], "Work/") {
+		t.Errorf("nested line = %q, want the leaf only", lines[1])
 	}
 }
 
@@ -199,7 +203,7 @@ func TestFolderLineTruncates(t *testing.T) {
 		{Name: "a folder name long enough to need truncation", Delimiter: '/'},
 	}, nil)
 
-	line := m.folderLine(0, 20)
+	line := m.folderLines(1, 20)[0]
 	if !strings.Contains(line, "...") {
 		t.Errorf("folder line %q has no ellipsis", line)
 	}

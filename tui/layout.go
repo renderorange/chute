@@ -87,10 +87,11 @@ func ComputeLayout(width, height int) Layout {
 // ComputeLayoutWith sizes the panels for a terminal of the given dimensions and a
 // configured sizing.
 //
-// Widths always sum to ContentWidth: the reader absorbs whatever the other panels do not
-// take, and it keeps MinReaderWidth by shrinking the message list first and the folder pane
-// second. A configured width that cannot fit is trimmed to those floors rather than
-// rejected, because the same config is used at every terminal size.
+// The pane widths plus the PanelGap columns between them always sum to ContentWidth:
+// the reader absorbs whatever the other panels do not take, and it keeps
+// MinReaderWidth by shrinking the message list first and the folder pane second. A
+// configured width that cannot fit is trimmed to those floors rather than rejected,
+// because the same config is used at every terminal size.
 func ComputeLayoutWith(width, height int, widths Widths) Layout {
 	w := ContentWidth(width)
 	h := ContentHeight(height)
@@ -100,8 +101,10 @@ func ComputeLayoutWith(width, height int, widths Widths) Layout {
 		folders := folderColumns(w, widths)
 		messages := messageColumns(w, widths, autoMessagesPercentT)
 
+		gaps := 2 * PanelGap
+
 		// Give the reader its minimum back, from the list first and the folders last.
-		if short := MinReaderWidth - (w - folders - messages); short > 0 {
+		if short := MinReaderWidth - (w - folders - messages - gaps); short > 0 {
 			cut := min(short, messages-MinMessagesWidth)
 			messages -= cut
 			short -= cut
@@ -110,30 +113,35 @@ func ComputeLayoutWith(width, height int, widths Widths) Layout {
 				folders -= min(short, folders-MinFoldersWidth)
 			}
 		}
-		if rest := w - folders - messages; rest < 1 {
-			messages = max(0, w-folders-1)
+		if rest := w - folders - messages - gaps; rest < 1 {
+			messages = max(0, w-folders-1-gaps)
 		}
 
 		return Layout{
 			Mode:     ModeThree,
 			Folders:  Box{X: 0, Y: 0, Width: folders, Height: h},
-			Messages: Box{X: folders, Y: 0, Width: messages, Height: h},
-			Reader:   Box{X: folders + messages, Y: 0, Width: w - folders - messages, Height: h},
+			Messages: Box{X: folders + PanelGap, Y: 0, Width: messages, Height: h},
+			Reader: Box{
+				X:      folders + PanelGap + messages + PanelGap,
+				Y:      0,
+				Width:  w - folders - messages - gaps,
+				Height: h,
+			},
 		}
 
 	case width >= NarrowBreakpoint:
 		messages := messageColumns(w, widths, autoMessagesPercentTwo)
-		if w-messages < MinReaderWidth {
-			messages = max(0, w-MinReaderWidth)
+		if w-messages-PanelGap < MinReaderWidth {
+			messages = max(0, w-MinReaderWidth-PanelGap)
 		}
-		if messages > w-1 {
-			messages = max(0, w-1)
+		if messages > w-PanelGap-1 {
+			messages = max(0, w-PanelGap-1)
 		}
 
 		return Layout{
 			Mode:     ModeTwo,
 			Messages: Box{X: 0, Y: 0, Width: messages, Height: h},
-			Reader:   Box{X: messages, Y: 0, Width: w - messages, Height: h},
+			Reader:   Box{X: messages + PanelGap, Y: 0, Width: w - messages - PanelGap, Height: h},
 		}
 	}
 

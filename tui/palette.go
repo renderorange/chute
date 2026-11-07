@@ -37,6 +37,13 @@ const (
 	PanelPaddingHorizontal = 1
 )
 
+// PanelGap is the blank column between two panels, added to the padding each panel
+// already carries. Without it the two panes' one-cell paddings meet and the message
+// list, whose date column runs to the edge, reads as if it touches the reader. It is
+// a layout quantity, not padding: ComputeLayout subtracts it from the pane widths, so
+// the visible columns still add up to the content width and the frame stays exact.
+const PanelGap = 2
+
 // Breakpoints, measured in terminal columns.
 const (
 	// NarrowBreakpoint is the width below which only one panel fits.

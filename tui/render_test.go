@@ -419,7 +419,7 @@ func TestConfiguredWidthsReachTheFrame(t *testing.T) {
 	if got := layout.Messages.Width; got != 70 {
 		t.Errorf("messages width = %d, want the configured 70", got)
 	}
-	if got, want := layout.Reader.Width, ContentWidth(200)-100; got != want {
+	if got, want := layout.Reader.Width, ContentWidth(200)-100-2*PanelGap; got != want {
 		t.Errorf("reader width = %d, want %d", got, want)
 	}
 
@@ -495,5 +495,51 @@ func TestViewAtEachBreakpointHasNoEmptyPanel(t *testing.T) {
 				t.Fatalf("width %d: line %d is %d cells: %q", tc.width, i, got, line)
 			}
 		}
+	}
+}
+
+// TestPanelGapIsRealColumns proves the inter-panel gap is drawn, not just reserved in
+// the arithmetic: every line of the gap block is blank and exactly PanelGap cells, so
+// JoinHorizontal cannot pad the lower rows with zero-width empty lines.
+func TestPanelGapIsRealColumns(t *testing.T) {
+	lines := strings.Split(blankBlock(PanelGap, 5), "\n")
+	if len(lines) != 5 {
+		t.Fatalf("gap block has %d lines, want 5", len(lines))
+	}
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			t.Errorf("gap line %d is not blank: %q", i, line)
+		}
+		if got := lipgloss.Width(line); got != PanelGap {
+			t.Errorf("gap line %d is %d cells, want %d", i, got, PanelGap)
+		}
+	}
+}
+
+// titleStart is the column a panel title begins at, ignoring the focus marker.
+func titleStart(line, name string) int {
+	index := strings.Index(line, name)
+	if index >= 2 && line[index-2:index] == "> " {
+		return index - 2
+	}
+
+	return index
+}
+
+// TestPanelGapMovesTheTitlesApart ties the gap to the rendered frame: the second and
+// third panel titles sit exactly where the layout puts them, so the join inserts the
+// gap rather than the panes merely happening to be narrow.
+func TestPanelGapMovesTheTitlesApart(t *testing.T) {
+	m := loaded(t, 140, 40, sampleFolders(3), nil) // folders keeps the focus marker
+	layout := m.layout()
+	line := titleLine(m.View())
+
+	if got, want := titleStart(line, "messages")-titleStart(line, "folders"),
+		layout.Messages.X-layout.Folders.X; got != want {
+		t.Errorf("folders to messages = %d columns, want %d", got, want)
+	}
+	if got, want := titleStart(line, "reader")-titleStart(line, "messages"),
+		layout.Reader.X-layout.Messages.X; got != want {
+		t.Errorf("messages to reader = %d columns, want %d", got, want)
 	}
 }

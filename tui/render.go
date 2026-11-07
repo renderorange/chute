@@ -59,6 +59,23 @@ func JoinHorizontal(parts ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
 
+// blankBlock returns width blank cells over height lines, for the gap between panels.
+// JoinHorizontal pads a short part with empty lines, and an empty line is zero cells
+// wide, so the gap has to be a real block or every row after the first loses its width.
+func blankBlock(width, height int) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+
+	line := strings.Repeat(" ", width)
+	lines := make([]string, height)
+	for i := range lines {
+		lines[i] = line
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // JoinVertical stacks blocks, left aligned.
 func JoinVertical(parts ...string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)

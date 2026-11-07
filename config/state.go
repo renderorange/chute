@@ -14,9 +14,10 @@ const stateFilename = "state.toml"
 
 // State is the last selection, remembered so a restart lands where the user left.
 //
-// It holds names only: which account was active, and which folder each account had
-// open. No credentials, no addresses, no message data. The config remains the
-// authority — a name that no longer exists there is simply ignored.
+// It holds names only: which account was active, which folder each account had
+// open, and which folders each account had expanded in the folder tree. No
+// credentials, no addresses, no message data. The config remains the authority — a
+// name that no longer exists there is simply ignored.
 type State struct {
 	// Account is the account that was active, by name. Empty means none was recorded.
 	Account string `toml:"account"`
@@ -24,6 +25,11 @@ type State struct {
 	// Folders maps an account name to the folder it had open. A missing entry means
 	// the account has no recorded folder.
 	Folders map[string]string `toml:"folders"`
+
+	// Expanded maps an account name to the folders whose subfolders were shown. A
+	// folder absent from the list is collapsed, which is also the default for a new
+	// state file: the tree opens showing only its top level.
+	Expanded map[string][]string `toml:"expanded"`
 }
 
 // StatePath is the last-selection file: $XDG_STATE_HOME/chute/state.toml, or

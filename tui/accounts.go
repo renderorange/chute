@@ -103,6 +103,7 @@ func (m Model) selectAccount(index int) (tea.Model, tea.Cmd) {
 	m.folders = nil
 	m.folderCursor = 0
 	m.folderScroll = 0
+	m.folderExpanded = nil
 
 	m.openFolder = ""
 	m.messages = nil

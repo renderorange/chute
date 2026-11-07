@@ -71,7 +71,7 @@ func helpGroups() []helpGroup {
 			rows: []helpRow{
 				helpPair(actionUp, actionDown, "move"),
 				helpPair(actionTop, actionBottom, "first/last"),
-				helpAction(actionOpen, "open"),
+				helpPair(actionOpen, actionExpandFolder, "open / expand"),
 				helpPair(actionFilter, actionSearch, "filter / search"),
 				helpAction(actionVisualRange, "select range"),
 				helpAction(actionDelete, "delete"),
@@ -79,7 +79,7 @@ func helpGroups() []helpGroup {
 				helpAction(actionJunk, "junk"),
 				helpAction(actionMove, "move to folder"),
 				helpAction(actionEmptyTrash, "empty Trash"),
-				helpAction(actionCollapse, "collapse thread"),
+				helpPair(actionCollapse, actionCollapseFolder, "collapse thread / folder"),
 				helpAction(actionToggleFlag, "flag"),
 				helpAction(actionToggleRead, "read/unread"),
 				helpAction(actionAttachments, "attachments"),
