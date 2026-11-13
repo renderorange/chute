@@ -1,0 +1,36 @@
+# Vendored from renderorange/.github:.github/workflows/pr-events.yml
+# Public repositories cannot call reusable workflows in private repositories, so
+# chute carries its own copy and calls it as a local workflow. Runs on a
+# GitHub-hosted runner: the message needs nothing from the self-hosted box.
+name: pr-events
+
+on:
+  workflow_call:
+    secrets:
+      SLACK_DEVELOPMENT_WEBHOOK_URL:
+        required: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      # A reusable workflow gets no checkout of its own, and a local action
+      # cannot be resolved without one.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Post PR event to develop channel
+        uses: ./.github/actions/slack-notify
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEVELOPMENT_WEBHOOK_URL }}
+        with:
+          template: pr-event
+          status: >-
+            ${{
+              github.event.action == 'closed' &&
+              (github.event.pull_request.merged && 'merged' || 'closed') ||
+              github.event.action
+            }}
+          repo: ${{ github.repository }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          author: ${{ github.event.pull_request.user.login }}

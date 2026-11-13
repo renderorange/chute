@@ -1,0 +1,78 @@
+# Vendored from renderorange/.github:.github/actions/slack-notify
+# Required because chute is a public repository and a public repository cannot
+# consume actions from a private one. Keep this byte-identical to the source
+# except for this header, and update the source first.
+name: slack-notify
+description: Post a pipeline or develop message to Slack via incoming webhook
+inputs:
+  template:
+    description: message shape - job | review | pr-event
+    required: true
+  status:
+    description: pr-event status word - opened | merged | closed | assigned
+    required: false
+    default: ""
+  job:
+    description: job or workflow name for job/review templates
+    required: false
+    default: ""
+  conclusion:
+    description: job.status at end - success | failure | cancelled
+    required: false
+    default: success
+  summary:
+    description: optional suffix, e.g. findings count
+    required: false
+    default: ""
+  repo:
+    description: full name owner/name
+    required: false
+    default: ""
+  run-id:
+    description: github.run_id
+    required: false
+    default: ""
+  pr-number:
+    description: github.event.pull_request.number
+    required: false
+    default: ""
+  pr-title:
+    description: github.event.pull_request.title
+    required: false
+    default: ""
+  author:
+    description: PR author login
+    required: false
+    default: ""
+  sha:
+    description: full commit sha; defaults to GITHUB_SHA (7-char preview in message)
+    required: false
+    default: ""
+  branch:
+    description: branch name; defaults to GITHUB_HEAD_REF then GITHUB_REF_NAME
+    required: false
+    default: ""
+  dry-run:
+    description: print payload instead of posting
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Post to Slack
+      shell: bash
+      env:
+        IN_TEMPLATE: ${{ inputs.template }}
+        IN_STATUS: ${{ inputs.status }}
+        IN_JOB: ${{ inputs.job }}
+        IN_CONCLUSION: ${{ inputs.conclusion }}
+        IN_SUMMARY: ${{ inputs.summary }}
+        IN_REPO: ${{ inputs.repo }}
+        IN_RUN_ID: ${{ inputs.run-id }}
+        IN_PR_NUMBER: ${{ inputs.pr-number }}
+        IN_PR_TITLE: ${{ inputs.pr-title }}
+        IN_AUTHOR: ${{ inputs.author }}
+        IN_SHA: ${{ inputs.sha }}
+        IN_BRANCH: ${{ inputs.branch }}
+        IN_DRY_RUN: ${{ inputs.dry-run }}
+      run: bash "${{ github.action_path }}/run.sh"
