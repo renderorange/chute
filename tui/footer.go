@@ -137,8 +137,19 @@ func (m Model) footerHints() []footerHint {
 		return []footerHint{hint(actionOpen, "search"), hint(actionBack, "cancel")}
 	case m.filterOpen:
 		return []footerHint{hint(actionOpen, "keep"), hint(actionBack, "clear")}
+	case m.newFolderOpen:
+		return []footerHint{hint(actionOpen, "create"), hint(actionBack, "cancel")}
+	case m.folderMoveOpen:
+		return []footerHint{
+			literalHint("type", "filter"),
+			hintPair(actionUp, actionDown, "choose"),
+			hint(actionOpen, "choose"),
+			hint(actionBack, "close"),
+		}
 	case m.confirmOpen && m.confirmKind == confirmDiscardDraft:
 		return []footerHint{hint(actionOpen, "discard"), hint(actionBack, "keep editing")}
+	case m.confirmOpen && m.confirmKind == confirmMoveFolder:
+		return []footerHint{hint(actionOpen, "move"), hint(actionBack, "cancel")}
 	case m.confirmOpen:
 		return []footerHint{hint(actionOpen, "delete"), hint(actionBack, "cancel")}
 	case m.compose != nil:
@@ -183,6 +194,17 @@ func (m Model) footerHints() []footerHint {
 			hint(actionToggleRead, "read"),
 			hint(actionBack, "cancel"),
 			hintPair(actionUp, actionDown, "extend"),
+			hint(actionQuit, "quit"),
+		}
+	// The folder pane's keys are its own: d, m and f act on messages, which that pane does
+	// not show, so advertising them there points at keys that do nothing. Folder management
+	// leads instead, because it is the only thing those keys do in this pane.
+	case m.focus == focusFolders:
+		return []footerHint{
+			hint(actionDeleteFolder, "delete"),
+			hint(actionMoveFolder, "move"),
+			hint(actionNewFolder, "new"),
+			hint(actionOpen, "open"),
 			hint(actionQuit, "quit"),
 		}
 	case m.focus == focusReader:

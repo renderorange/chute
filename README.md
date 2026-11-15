@@ -190,6 +190,9 @@ Composer keys are fixed, not part of `[keys]`:
 | `junk` | `!` | Move to the junk mailbox. |
 | `move` | `m` | Move to a mailbox chosen from a picker; type to filter the folder list. |
 | `empty_trash` | `X` | Delete everything in Trash, after a confirmation. Only works inside Trash. |
+| `new_folder` | `N` | In the folder pane, create a folder under the one selected; type a nested name to add levels. |
+| `move_folder` | `M` | In the folder pane, move the selected folder under another one, after a confirmation naming the destination. Subfolders move with it. |
+| `delete_folder` | `D` | In the folder pane, delete the selected folder after a confirmation. Refused while it holds mail or has subfolders. |
 | `collapse` | `z` | Fold or unfold the conversation under the cursor. |
 | `expand_folder` | `right` | In the folder pane, expand the folder under the cursor. |
 | `collapse_folder` | `left` | In the folder pane, fold the folder under the cursor. |

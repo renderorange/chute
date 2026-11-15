@@ -44,6 +44,19 @@ type fakeClient struct {
 	emptyFolder string
 	emptyErr    error
 
+	// Folder management: what the session asked the server to do, and the canned
+	// answers the refusals read.
+	createdMailboxes []string
+	renamedMailboxes []renameCall
+	deletedMailbox   string
+	countedMailbox   string
+	mailboxMessages  uint32
+	mailboxErr       error
+
+	// foldersQueue answers successive Folders calls, for the servers that cascade a
+	// rename and the ones that do not.
+	foldersQueue [][]Folder
+
 	compose     *Compose
 	appendCalls []appendCall
 	appendErr   error
@@ -75,6 +88,16 @@ func (f *fakeClient) Folders() ([]Folder, error) {
 	f.requests++
 	if f.err != nil {
 		return nil, f.err
+	}
+
+	// A queued listing lets a test show the session a different answer on a later
+	// call, which is how a cascading server differs from one that leaves the
+	// descendants behind.
+	if len(f.foldersQueue) > 0 {
+		next := f.foldersQueue[0]
+		f.foldersQueue = f.foldersQueue[1:]
+
+		return next, nil
 	}
 
 	return f.folders, nil
@@ -241,6 +264,60 @@ func (f *fakeClient) EmptyFolder(folder string) error {
 	}
 
 	return f.err
+}
+
+// CreateMailbox records a mailbox the session asked the server to create.
+func (f *fakeClient) CreateMailbox(name string) error {
+	f.requests++
+	f.createdMailboxes = append(f.createdMailboxes, name)
+
+	if f.mailboxErr != nil {
+		return f.mailboxErr
+	}
+
+	return f.err
+}
+
+// RenameMailbox records one rename, so a test can assert the cascade order.
+func (f *fakeClient) RenameMailbox(name, newName string) error {
+	f.requests++
+	f.renamedMailboxes = append(f.renamedMailboxes, renameCall{from: name, to: newName})
+
+	if f.mailboxErr != nil {
+		return f.mailboxErr
+	}
+
+	return f.err
+}
+
+// DeleteMailbox records the mailbox the session asked the server to remove.
+func (f *fakeClient) DeleteMailbox(name string) error {
+	f.requests++
+	f.deletedMailbox = name
+
+	if f.mailboxErr != nil {
+		return f.mailboxErr
+	}
+
+	return f.err
+}
+
+// MailboxMessages returns the canned message count for a folder operation.
+func (f *fakeClient) MailboxMessages(name string) (uint32, error) {
+	f.requests++
+	f.countedMailbox = name
+
+	if f.mailboxErr != nil {
+		return 0, f.mailboxErr
+	}
+
+	return f.mailboxMessages, f.err
+}
+
+// renameCall records one RENAME so a test can see the order the session used.
+type renameCall struct {
+	from string
+	to   string
 }
 
 // Search records the criteria a session ran and returns the canned messages.
