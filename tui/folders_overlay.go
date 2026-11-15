@@ -43,6 +43,15 @@ func (m Model) handleFoldersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case actionDown:
 		m.folderOverlayCursor = min(m.folderOverlayCursor+1, len(m.folders)-1)
 
+	case actionNewFolder:
+		return m.beginNewFolder()
+
+	case actionMoveFolder:
+		return m.beginMoveFolder()
+
+	case actionDeleteFolder:
+		return m.beginDeleteFolder()
+
 	case actionOpen:
 		if m.folderOverlayCursor < 0 || m.folderOverlayCursor >= len(m.folders) {
 			return m, nil

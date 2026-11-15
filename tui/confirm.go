@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/emersion/go-imap/v2"
+	"github.com/renderorange/chute/mail"
 )
 
 // confirmKind says what a confirmation is asking about. The modal text and the action
@@ -18,6 +19,8 @@ const (
 	confirmDiscardDraft
 	confirmPurge
 	confirmEmptyTrash
+	confirmDeleteFolder
+	confirmMoveFolder
 )
 
 // triageReady reports whether a message panel owns the selection. Without this
@@ -68,12 +71,19 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.confirmOpen = false
 		m.pendingDelete = nil
 		m.pendingEmpty = 0
+		m.pendingFolder = ""
+		m.pendingFolderParent = ""
+		m.pendingFolderBelow = 0
 
 		switch m.confirmKind {
 		case confirmDiscardDraft:
 			m.status = "kept editing"
 		case confirmPurge, confirmEmptyTrash:
 			m.status = "kept in Trash"
+		case confirmDeleteFolder:
+			m.status = "kept folder"
+		case confirmMoveFolder:
+			m.status = "move cancelled"
 		default:
 			m.status = "delete cancelled"
 		}
@@ -89,9 +99,14 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		uids := m.pendingDelete
 		kind := m.confirmKind
+		folder := m.pendingFolder
+		folderAt := m.pendingFolderParent
 		m.confirmOpen = false
 		m.pendingDelete = nil
 		m.pendingEmpty = 0
+		m.pendingFolder = ""
+		m.pendingFolderParent = ""
+		m.pendingFolderBelow = 0
 
 		switch kind {
 		case confirmPurge:
@@ -103,6 +118,12 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		case confirmEmptyTrash:
 			return m, m.emptyTrashCmd()
+
+		case confirmDeleteFolder:
+			return m, m.deleteFolderCmd(folder)
+
+		case confirmMoveFolder:
+			return m, m.moveFolderCmd(folder, folderAt)
 		}
 
 		if len(uids) == 0 {
@@ -231,6 +252,27 @@ func (m Model) renderConfirmModal(width, height int) string {
 			"",
 			MutedStyle.Render("enter:empty  esc:cancel"),
 		}
+	case confirmDeleteFolder:
+		lines = []string{
+			ErrorStyle.Render("delete folder"),
+			"",
+			TruncateDisplay(fmt.Sprintf("delete %s? cannot be undone", m.pendingFolder), width-6),
+		}
+		if role := m.pendingFolderRole(); role != mail.RoleNone {
+			lines = append(lines, MutedStyle.Render(TruncateDisplay(fmt.Sprintf("it serves the %s role", role), width-6)))
+		}
+		lines = append(lines, "", MutedStyle.Render("enter:delete  esc:cancel"))
+	case confirmMoveFolder:
+		lines = []string{
+			TitleStyle.Render("move folder"),
+			"",
+			TruncateDisplay(fmt.Sprintf("move %s to %s?", m.pendingFolder, m.pendingFolderDestination()), width-6),
+		}
+		if m.pendingFolderBelow > 0 {
+			lines = append(lines, MutedStyle.Render(
+				fmt.Sprintf("%s move with it", countLabel(m.pendingFolderBelow, "folder"))))
+		}
+		lines = append(lines, "", MutedStyle.Render("enter:move  esc:cancel"))
 	}
 
 	modal := ModalStyle.Render(strings.Join(lines, "\n"))

@@ -38,6 +38,19 @@ type purgeMessagesFunc func(acct config.Account, folder string, uids []imap.UID)
 // emptyTrashFunc deletes every message in the account's trash mailbox.
 type emptyTrashFunc func(acct config.Account) error
 
+// newFolderFunc creates a mailbox, returning the listing the server confirmed.
+type newFolderFunc func(acct config.Account, name string) ([]mail.Folder, error)
+
+// moveFolderFunc renames a mailbox under a new parent, returning its new full name and
+// the listing the server confirmed. An empty parent is the top level.
+type moveFolderFunc func(acct config.Account, name, parent string) (string, []mail.Folder, error)
+
+// deleteFolderFunc removes an empty mailbox, returning the listing the server confirmed.
+type deleteFolderFunc func(acct config.Account, name string) ([]mail.Folder, error)
+
+// folderMessagesFunc counts the messages in one mailbox, for the delete check.
+type folderMessagesFunc func(acct config.Account, name string) (uint32, error)
+
 // fetchComposeFunc reads one message as an editable draft.
 type fetchComposeFunc func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error)
 
@@ -78,6 +91,10 @@ type loaders struct {
 	moveToFolder   moveToFolderFunc
 	purgeMessages  purgeMessagesFunc
 	emptyTrash     emptyTrashFunc
+	newFolder      newFolderFunc
+	moveFolder     moveFolderFunc
+	deleteFolder   deleteFolderFunc
+	folderMessages folderMessagesFunc
 
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
@@ -120,6 +137,18 @@ func sessionLoaders(manager *mail.Manager) loaders {
 		},
 		emptyTrash: func(acct config.Account) error {
 			return manager.For(acct).EmptyTrash()
+		},
+		newFolder: func(acct config.Account, name string) ([]mail.Folder, error) {
+			return manager.For(acct).NewFolder(name)
+		},
+		moveFolder: func(acct config.Account, name, parent string) (string, []mail.Folder, error) {
+			return manager.For(acct).MoveFolder(name, parent)
+		},
+		deleteFolder: func(acct config.Account, name string) ([]mail.Folder, error) {
+			return manager.For(acct).DeleteFolder(name)
+		},
+		folderMessages: func(acct config.Account, name string) (uint32, error) {
+			return manager.For(acct).FolderMessages(name)
 		},
 		fetchCompose: func(acct config.Account, folder string, uid imap.UID) (*mail.Compose, error) {
 			return manager.For(acct).FetchCompose(folder, uid)
@@ -249,5 +278,41 @@ type uidsMsg struct {
 	account string
 	folder  string
 	uids    []imap.UID
+	err     error
+}
+
+// folderCreatedMsg carries the listing a successful create returned, and the name to
+// put the cursor on.
+type folderCreatedMsg struct {
+	account string
+	name    string
+	folders []mail.Folder
+	err     error
+}
+
+// folderMovedMsg carries the listing a successful move returned. oldName and newName are
+// full paths, so the open folder and the remembered selection can follow the move.
+type folderMovedMsg struct {
+	account string
+	oldName string
+	newName string
+	folders []mail.Folder
+	err     error
+}
+
+// folderDeletedMsg carries the listing a successful delete returned.
+type folderDeletedMsg struct {
+	account string
+	name    string
+	folders []mail.Folder
+	err     error
+}
+
+// folderCheckedMsg carries the message count that decides whether a delete may be
+// confirmed. The count comes from the server, not the listing.
+type folderCheckedMsg struct {
+	account string
+	name    string
+	count   uint32
 	err     error
 }

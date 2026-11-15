@@ -26,6 +26,10 @@ type sessionClient interface {
 	MoveToFolder(folder, dest string, uids []imap.UID) error
 	PurgeMessages(folder string, uids []imap.UID) error
 	EmptyFolder(folder string) error
+	CreateMailbox(name string) error
+	RenameMailbox(name, newName string) error
+	DeleteMailbox(name string) error
+	MailboxMessages(name string) (uint32, error)
 	Unseen(folder string) (uint32, error)
 	Poll(folder string, since imap.UID) (PollResult, error)
 	Search(folder string, criteria imap.SearchCriteria) ([]Message, error)

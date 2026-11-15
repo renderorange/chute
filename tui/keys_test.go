@@ -58,16 +58,17 @@ func TestNavigationKeysAreArrowsOnly(t *testing.T) {
 	}
 }
 
-// TestMoveAndReadBindingsMatchTheIssue records #88's rebind: m moves a message, u
-// toggles read/unread, and the old uppercase M is gone rather than left behind as a
-// silent alias.
+// TestMoveAndReadBindingsMatchTheIssue records #88's rebind: m moves a message and u
+// toggles read/unread. #88 removed uppercase M as a second name for the message move;
+// #105 gives M to the folder pane's move, which is a different intent, so the key is
+// bound again without reviving the alias.
 func TestMoveAndReadBindingsMatchTheIssue(t *testing.T) {
 	b := defaultBindings()
 
 	for key, want := range map[string]action{
 		"m": actionMove,
 		"u": actionToggleRead,
-		"M": actionNone,
+		"M": actionMoveFolder,
 	} {
 		if got := b.resolve(key); got != want {
 			t.Errorf("%q resolves to action %d, want %d", key, got, want)

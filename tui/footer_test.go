@@ -17,17 +17,39 @@ type footerCase struct {
 // hint. It is asserted whole rather than by substring so a hint that grows past
 // the budget fails here instead of being silently dropped. The owner asked for
 // this set to shrink to the mistake-preventing keys (#26): the footer is a
-// reminder, not the keymap, and the rest waits for the help screen.
+// reminder, not the keymap, and the rest waits for the help screen. This is the message
+// list's set; the folders pane has its own, pinned in folderFooterHints.
 const footerDefaultHints = "d:delete  f:flag  m:move  enter:open  q:quit"
+
+// folderFooterHints is the folders pane: its keys act on the tree, not on messages, so
+// advertising d, m and f there would point at keys that do nothing in that pane (#105).
+const folderFooterHints = "D:delete  M:move  N:new  enter:open  q:quit"
+
+// listModel is sized with the message list focused, which is the context the default
+// footer set describes.
+func listFooterModel(width, height int) Model {
+	m := sized(width, height)
+	m.focus = focusMessages
+
+	return m
+}
 
 // footerCases builds one model per footer context. Every model is 105 columns
 // unless the case is about the composer, whose hints are wider.
 func footerCases(t *testing.T) []footerCase {
 	t.Helper()
 
+	// The list is the default context: a model that has not navigated yet sits on the
+	// folders pane, whose footer names its own keys.
 	base := func(width int) Model {
-		return sized(width, 40)
+		m := sized(width, 40)
+		m.focus = focusMessages
+
+		return m
 	}
+
+	folderPane := sized(105, 40)
+	folderPane.focus = focusFolders
 
 	reader := base(105)
 	reader.focus = focusReader
@@ -61,6 +83,7 @@ func footerCases(t *testing.T) []footerCase {
 	return []footerCase{
 		{"default", base(105)},
 		{"default narrow", base(60)},
+		{"folders", folderPane},
 		{"reader", reader},
 		{"reader narrow", readerNarrow},
 		{"visual range", visual},
@@ -110,7 +133,7 @@ func TestFooterKeysResolveToTheirActions(t *testing.T) {
 // TestFooterFollowsARebind proves the hints come from the binding table rather
 // than from a second copy of the keymap: rebinding delete moves the hint with it.
 func TestFooterFollowsARebind(t *testing.T) {
-	m := sized(105, 40)
+	m := listFooterModel(105, 40)
 	m.keys[actionDelete] = []string{"x"}
 
 	footer := m.renderFooter()
@@ -126,7 +149,7 @@ func TestFooterFollowsARebind(t *testing.T) {
 // TestFooterRemovedBindingIsDropped proves a hint disappears when its action has
 // no keys, instead of rendering a bare ":label".
 func TestFooterRemovedBindingIsDropped(t *testing.T) {
-	m := sized(105, 40)
+	m := listFooterModel(105, 40)
 	m.keys[actionToggleFlag] = nil
 
 	footer := m.renderFooter()
@@ -136,11 +159,31 @@ func TestFooterRemovedBindingIsDropped(t *testing.T) {
 	}
 }
 
+// TestFooterFolderPaneIsItsOwnSet pins the pane's set exactly, the way the list's is
+// pinned. #105 gave the folder pane keys of its own, and a footer that still advertised
+// d:delete there would name a key that does nothing in that pane.
+func TestFooterFolderPaneIsItsOwnSet(t *testing.T) {
+	for _, width := range []int{60, 105} {
+		m := sized(width, 40)
+		if m.focus != focusFolders {
+			t.Fatalf("%d columns: focus = %v, want folders", width, m.focus)
+		}
+
+		footer := m.renderFooter()
+		if footer != folderFooterHints {
+			t.Errorf("folder footer at %d = %q, want %q", width, footer, folderFooterHints)
+		}
+		if got, limit := lipgloss.Width(footer), ContentWidth(width); got > limit {
+			t.Errorf("folder footer at %d is %d cells, want at most %d", width, got, limit)
+		}
+	}
+}
+
 // TestFooterAt105IsTheFullSet pins the tablet footer exactly: the priority keys,
 // nothing else. #26 cut this from ten hints to five on the owner's report that
 // the footer was overwhelming.
 func TestFooterAt105IsTheFullSet(t *testing.T) {
-	m := sized(105, 40)
+	m := listFooterModel(105, 40)
 
 	if got := m.renderFooter(); got != footerDefaultHints {
 		t.Errorf("footer at 105 =\n  %q\nwant\n  %q", got, footerDefaultHints)
@@ -150,7 +193,7 @@ func TestFooterAt105IsTheFullSet(t *testing.T) {
 // TestFooterAt105FillsTheBudget proves the exact-fit string is legal: within the
 // content width and never cut.
 func TestFooterAt105FillsTheBudget(t *testing.T) {
-	m := sized(105, 40)
+	m := listFooterModel(105, 40)
 	footer := m.renderFooter()
 
 	if got, limit := lipgloss.Width(footer), ContentWidth(105); got > limit {
@@ -164,7 +207,7 @@ func TestFooterAt105FillsTheBudget(t *testing.T) {
 // TestFooterAt60KeepsWholeHints proves the narrow footer drops nothing at the
 // supported floor: the five hints fit in 54 cells.
 func TestFooterAt60KeepsWholeHints(t *testing.T) {
-	m := sized(60, 40)
+	m := listFooterModel(60, 40)
 	footer := m.renderFooter()
 
 	if footer != footerDefaultHints {
@@ -179,7 +222,7 @@ func TestFooterAt60KeepsWholeHints(t *testing.T) {
 // set fits from 60 columns up (44 cells in 54), so the drop path is exercised just
 // below it: at 44 columns the quit hint no longer fits and is dropped whole, never cut.
 func TestFooterDropsWholeHintsWhenItMust(t *testing.T) {
-	m := sized(44, 20)
+	m := listFooterModel(44, 20)
 	footer := m.renderFooter()
 
 	const want = "d:delete  f:flag  m:move  enter:open"
@@ -201,7 +244,7 @@ func TestFooterDropsWholeHintsWhenItMust(t *testing.T) {
 // invite more hints back in. The set is fixed; the width is only a safety net.
 func TestFooterWideStaysCalm(t *testing.T) {
 	for _, width := range []int{120, 130, 140, 200} {
-		if got := sized(width, 40).renderFooter(); got != footerDefaultHints {
+		if got := listFooterModel(width, 40).renderFooter(); got != footerDefaultHints {
 			t.Errorf("footer at %d = %q, want the five-hint set", width, got)
 		}
 	}
@@ -211,7 +254,7 @@ func TestFooterWideStaysCalm(t *testing.T) {
 // whole hints, not substrings, because "ctrl+r:reload" contains "r:reload".
 func TestFooterNeverSaysRReload(t *testing.T) {
 	for _, width := range []int{60, 80, 95, 105, 115, 130, 140, 200} {
-		for _, hint := range strings.Split(sized(width, 40).renderFooter(), hintSeparator) {
+		for _, hint := range strings.Split(listFooterModel(width, 40).renderFooter(), hintSeparator) {
 			if hint == "r:reload" {
 				t.Errorf("width %d: the footer claims r:reload", width)
 			}
@@ -223,6 +266,7 @@ func TestFooterNeverSaysRReload(t *testing.T) {
 // that none of them is truncated at the tablet width.
 func TestFooterModalContexts(t *testing.T) {
 	want := map[string][]string{
+		"folders":         {"D:delete", "M:move", "N:new", "enter:open", "q:quit"},
 		"reader":          {"n:next", "p:prev", "q:quit"},
 		"reader narrow":   {"n:next", "p:prev"},
 		"visual range":    {"up/down:extend", "esc:cancel", "d:delete"},
@@ -289,7 +333,7 @@ func TestFooterComposerKeepsItsLiteralKeys(t *testing.T) {
 // stays in the footer. At 105 the panel is reachable, so the key is optional and
 // does not spend the budget.
 func TestFooterReachesHiddenFolders(t *testing.T) {
-	two := sized(110, 40)
+	two := listFooterModel(110, 40)
 	if mode := two.layout().Mode; mode != ModeTwo {
 		t.Fatalf("110 columns is mode %d, want ModeTwo", mode)
 	}
@@ -297,7 +341,7 @@ func TestFooterReachesHiddenFolders(t *testing.T) {
 		t.Errorf("two-column footer does not reach the hidden folders panel: %q", footer)
 	}
 
-	single := sized(105, 40)
+	single := listFooterModel(105, 40)
 	if mode := single.layout().Mode; mode != ModeSingle {
 		t.Fatalf("105 columns is mode %d, want ModeSingle", mode)
 	}

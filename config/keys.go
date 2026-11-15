@@ -46,6 +46,9 @@ const (
 	KeyJunk              = "junk"
 	KeyMove              = "move"
 	KeyEmptyTrash        = "empty_trash"
+	KeyNewFolder         = "new_folder"
+	KeyMoveFolder        = "move_folder"
+	KeyDeleteFolder      = "delete_folder"
 	KeyCollapse          = "collapse"
 	KeyExpandFolder      = "expand_folder"
 	KeyCollapseFolder    = "collapse_folder"
@@ -88,6 +91,9 @@ var keyDefaults = map[string][]string{
 	KeyJunk:              {"!"},
 	KeyMove:              {"m"},
 	KeyEmptyTrash:        {"X"},
+	KeyNewFolder:         {"N"},
+	KeyMoveFolder:        {"M"},
+	KeyDeleteFolder:      {"D"},
 	KeyCollapse:          {"z"},
 	KeyExpandFolder:      {"right"},
 	KeyCollapseFolder:    {"left"},

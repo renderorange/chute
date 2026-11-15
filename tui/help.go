@@ -85,6 +85,18 @@ func helpGroups() []helpGroup {
 				helpAction(actionAttachments, "attachments"),
 			},
 		},
+		// The folders group is deliberately three rows: the help body has one screen of
+		// budget, and the pane's navigation keys (open, expand, fold, overlay) are already
+		// documented under global and list. What is new is that this pane now owns keys of its
+		// own, and those are what it has to name.
+		{
+			title: "folders",
+			rows: []helpRow{
+				helpAction(actionNewFolder, "new folder"),
+				helpAction(actionMoveFolder, "move folder"),
+				helpAction(actionDeleteFolder, "delete folder"),
+			},
+		},
 		{
 			title: "selection",
 			rows: []helpRow{

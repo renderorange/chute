@@ -129,6 +129,50 @@ func (c *Client) Folders() ([]Folder, error) {
 	return foldersFromList(data), nil
 }
 
+// CreateMailbox creates one mailbox. Any missing parent is the caller's job, because
+// servers differ on whether CREATE invents them.
+func (c *Client) CreateMailbox(name string) error {
+	if err := c.conn.Create(name, nil).Wait(); err != nil {
+		return fmt.Errorf("mail: account %q: creating %q: %w", c.account, name, err)
+	}
+
+	return nil
+}
+
+// RenameMailbox renames one mailbox and leaves its inferior names alone. Servers
+// differ on whether a rename cascades, so the caller repairs what is left behind.
+func (c *Client) RenameMailbox(name, newName string) error {
+	if err := c.conn.Rename(name, newName, nil).Wait(); err != nil {
+		return fmt.Errorf("mail: account %q: renaming %q to %q: %w", c.account, name, newName, err)
+	}
+
+	return nil
+}
+
+// DeleteMailbox deletes one mailbox. The server refuses a mailbox that still holds
+// mail only sometimes, so the caller checks first.
+func (c *Client) DeleteMailbox(name string) error {
+	if err := c.conn.Delete(name).Wait(); err != nil {
+		return fmt.Errorf("mail: account %q: deleting %q: %w", c.account, name, err)
+	}
+
+	return nil
+}
+
+// MailboxMessages counts the messages in a mailbox with one STATUS command. It does not
+// SELECT, so it leaves the open mailbox and its selection alone.
+func (c *Client) MailboxMessages(name string) (uint32, error) {
+	data, err := c.conn.Status(name, &imap.StatusOptions{NumMessages: true}).Wait()
+	if err != nil {
+		return 0, fmt.Errorf("mail: account %q: counting messages in %q: %w", c.account, name, err)
+	}
+	if data.NumMessages == nil {
+		return 0, nil
+	}
+
+	return *data.NumMessages, nil
+}
+
 // FetchEnvelopes opens a folder and returns every message's envelope, flags and
 // size. No message body is fetched.
 func (c *Client) FetchEnvelopes(folder string) ([]Message, error) {

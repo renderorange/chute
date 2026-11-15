@@ -40,6 +40,9 @@ const (
 	actionJunk
 	actionMove
 	actionEmptyTrash
+	actionNewFolder
+	actionMoveFolder
+	actionDeleteFolder
 	actionCollapse
 	actionExpandFolder
 	actionCollapseFolder
@@ -82,6 +85,9 @@ var actionNames = map[action]string{
 	actionJunk:              config.KeyJunk,
 	actionMove:              config.KeyMove,
 	actionEmptyTrash:        config.KeyEmptyTrash,
+	actionNewFolder:         config.KeyNewFolder,
+	actionMoveFolder:        config.KeyMoveFolder,
+	actionDeleteFolder:      config.KeyDeleteFolder,
 	actionCollapse:          config.KeyCollapse,
 	actionExpandFolder:      config.KeyExpandFolder,
 	actionCollapseFolder:    config.KeyCollapseFolder,

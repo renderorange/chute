@@ -112,6 +112,22 @@ type Model struct {
 	pendingDelete []imap.UID
 	pendingEmpty  int
 
+	// Folder management. The create prompt holds the typed name and the folder it will
+	// be created under; the move picker holds its own filtered destination list; the
+	// confirmation holds the folder it is about and the parent it moves to.
+	newFolderOpen       bool
+	folderName          string
+	folderBase          mail.Folder
+	folderMoveOpen      bool
+	folderMoveName      string
+	folderMoveCursor    int
+	folderMoveFilter    string
+	folderMoveRows      []folderParent
+	folderMoveMatches   []folderParent
+	pendingFolder       string
+	pendingFolderParent string
+	pendingFolderBelow  int
+
 	// filter narrows the loaded list; filterOpen is the prompt that edits it.
 	filter     string
 	filterOpen bool
@@ -149,6 +165,10 @@ type Model struct {
 	moveToFolder     moveToFolderFunc
 	purgeMessages    purgeMessagesFunc
 	emptyTrash       emptyTrashFunc
+	newFolder        newFolderFunc
+	moveFolder       moveFolderFunc
+	deleteFolder     deleteFolderFunc
+	folderMessages   folderMessagesFunc
 	fetchCompose     fetchComposeFunc
 	saveDraft        saveDraftFunc
 	appendSent       appendSentFunc
@@ -183,6 +203,10 @@ func New(cfg *config.Config, version string, mailOptions ...mail.Option) Model {
 		moveToFolder:     load.moveToFolder,
 		purgeMessages:    load.purgeMessages,
 		emptyTrash:       load.emptyTrash,
+		newFolder:        load.newFolder,
+		moveFolder:       load.moveFolder,
+		deleteFolder:     load.deleteFolder,
+		folderMessages:   load.folderMessages,
 		fetchCompose:     load.fetchCompose,
 		saveDraft:        load.saveDraft,
 		appendSent:       load.appendSent,
@@ -535,6 +559,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m.afterRemoval(msg.uids, fmt.Sprintf("emptied Trash (%s)", countLabel(len(msg.uids), "message")))
 
+	case folderCreatedMsg:
+		if msg.account != m.accountName() {
+			return m, nil
+		}
+
+		m.applyFolderCreated(msg)
+
+		return m, nil
+
+	case folderMovedMsg:
+		if msg.account != m.accountName() {
+			return m, nil
+		}
+
+		m.applyFolderMoved(msg)
+
+		return m, nil
+
+	case folderDeletedMsg:
+		if msg.account != m.accountName() {
+			return m, nil
+		}
+
+		return m.applyFolderDeleted(msg)
+
+	case folderCheckedMsg:
+		if msg.account != m.accountName() {
+			return m, nil
+		}
+
+		return m.applyFolderChecked(msg)
+
 	case searchMsg:
 		m.applySearch(msg)
 
@@ -576,6 +632,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.moveOpen {
 		return m.handleMoveKey(msg)
+	}
+	if m.newFolderOpen {
+		return m.handleNewFolderKey(msg)
+	}
+	if m.folderMoveOpen {
+		return m.handleFolderMoveKey(msg)
 	}
 	if m.foldersOpen {
 		return m.handleFoldersKey(msg)
@@ -636,6 +698,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case actionEmptyTrash:
 		return m.beginEmptyTrash()
+
+	case actionNewFolder:
+		return m.beginNewFolder()
+
+	case actionMoveFolder:
+		return m.beginMoveFolder()
+
+	case actionDeleteFolder:
+		return m.beginDeleteFolder()
 
 	case actionCollapse:
 		return m.toggleCollapse()
@@ -1051,6 +1122,14 @@ func (m Model) View() string {
 		}
 	case m.confirmOpen:
 		if modal := m.renderConfirmModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
+	case m.newFolderOpen:
+		if modal := m.renderNewFolderModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
+			panels = modal
+		}
+	case m.folderMoveOpen:
+		if modal := m.renderFolderMoveModal(ContentWidth(m.width), ContentHeight(m.height)); modal != "" {
 			panels = modal
 		}
 	case m.attachOpen:
